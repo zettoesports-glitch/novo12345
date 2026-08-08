@@ -75,7 +75,7 @@
 #pragma comment(lib, "wzAudio.lib")
 #ifdef IMPLEMENT_IMGUI_WIN32
 #include "imgui_impl_win32.h"
-#include "imgui_impl_opengl2.h"
+#include "imgui_impl_opengl3.h"
 #endif // IMPLEMENT_IMGUI_WIN32
 #include "ConnectVersionHex.h"
 
@@ -507,6 +507,19 @@ void DestroySound()
 
 bool CreateOpenglWindow()
 {
+	// =============================================================================
+	// FIX PASSO 1: OpenGL 3.3 Core Profile
+	// ------------------------------------------------------------------------------
+	// Antes: wglCreateContext() criava contexto Compatibility (Legacy)
+	// Agora:  wglCreateContextAttribsARB() cria contexto Core 3.3
+	//
+	// Chicken-egg do WGL:
+	//   1) Criar contexto LEGADO temporario so para carregar a funcao
+	//      wglCreateContextAttribsARB via wglGetProcAddress
+	//   2) Deletar o temporario
+	//   3) Criar o contexto CORE 3.3 definitivo
+	// =============================================================================
+
 	PIXELFORMATDESCRIPTOR pfd;
 	memset(&pfd, 0, sizeof(pfd));
 	pfd.nSize = sizeof(pfd);
@@ -551,27 +564,101 @@ bool CreateOpenglWindow()
 		return FALSE;
 	}
 
-	if (!(g_hRC = wglCreateContext(g_hDC)))
+	// ------------------------------------------------------------------------------
+	// PASSO 1.1: Contexto LEGADO temporario (chicken-egg WGL)
+	// ------------------------------------------------------------------------------
+	HGLRC hTempRC = wglCreateContext(g_hDC);
+	if (!hTempRC)
 	{
-		g_ErrorReport.Write("OpenGL Create Context Error - ErrorCode : %d\r\n", GetLastError());
+		g_ErrorReport.Write("OpenGL Create Temp Context Error - ErrorCode : %d\r\n", GetLastError());
 		KillGLWindow();
-		MessageBox(NULL, GlobalText[4], "OpenGL Create Context Error.", MB_OK | MB_ICONEXCLAMATION);
+		MessageBox(NULL, GlobalText[4], "OpenGL Create Temp Context Error.", MB_OK | MB_ICONEXCLAMATION);
 		return FALSE;
 	}
 
+	if (!wglMakeCurrent(g_hDC, hTempRC))
+	{
+		g_ErrorReport.Write("OpenGL Make Temp Current Error - ErrorCode : %d\r\n", GetLastError());
+		wglDeleteContext(hTempRC);
+		KillGLWindow();
+		MessageBox(NULL, GlobalText[4], "OpenGL Make Temp Current Error.", MB_OK | MB_ICONEXCLAMATION);
+		return FALSE;
+	}
+
+	// Carregar wglCreateContextAttribsARB (precisa de contexto atual para wglGetProcAddress)
+	typedef HGLRC (WINAPI * PFNWGLCREATECONTEXTATTRIBSARBPROC)(HDC hDC, HGLRC hShareContext, const int* attribList);
+	PFNWGLCREATECONTEXTATTRIBSARBPROC wglCreateContextAttribsARB =
+		(PFNWGLCREATECONTEXTATTRIBSARBPROC)wglGetProcAddress("wglCreateContextAttribsARB");
+
+	if (!wglCreateContextAttribsARB)
+	{
+		g_ErrorReport.Write("OpenGL wglCreateContextAttribsARB not supported!\r\n");
+		wglMakeCurrent(NULL, NULL);
+		wglDeleteContext(hTempRC);
+		KillGLWindow();
+		MessageBox(NULL, "OpenGL 3.3 Core Profile nao suportado.\nAtualize seu driver de video.", "Erro", MB_OK | MB_ICONERROR);
+		return FALSE;
+	}
+
+	// ------------------------------------------------------------------------------
+	// PASSO 1.2: Criar contexto CORE 3.3
+	// ------------------------------------------------------------------------------
+	int attribs[] =
+	{
+		WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
+		WGL_CONTEXT_MINOR_VERSION_ARB, 3,
+		WGL_CONTEXT_PROFILE_MASK_ARB,  WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
+		// WGL_CONTEXT_FLAGS_ARB,       WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB, // opcional
+		0, 0
+	};
+
+	g_hRC = wglCreateContextAttribsARB(g_hDC, 0, attribs);
+	if (!g_hRC)
+	{
+		g_ErrorReport.Write("OpenGL Create Core 3.3 Context Error - ErrorCode : %d\r\n", GetLastError());
+		wglMakeCurrent(NULL, NULL);
+		wglDeleteContext(hTempRC);
+		KillGLWindow();
+		MessageBox(NULL, GlobalText[4], "OpenGL Create Core 3.3 Context Error.", MB_OK | MB_ICONEXCLAMATION);
+		return FALSE;
+	}
+
+	// Tornar o contexto Core atual e deletar o temporario
 	if (!wglMakeCurrent(g_hDC, g_hRC))
 	{
-		g_ErrorReport.Write("OpenGL Make Current Error - ErrorCode : %d\r\n", GetLastError());
+		g_ErrorReport.Write("OpenGL Make Core Current Error - ErrorCode : %d\r\n", GetLastError());
+		wglDeleteContext(g_hRC);
+		g_hRC = NULL;
+		wglDeleteContext(hTempRC);
 		KillGLWindow();
-		MessageBox(NULL, GlobalText[4], "OpenGL Make Current Error.", MB_OK | MB_ICONEXCLAMATION);
+		MessageBox(NULL, GlobalText[4], "OpenGL Make Core Current Error.", MB_OK | MB_ICONEXCLAMATION);
 		return FALSE;
 	}
 
-	glewInit();
+	wglDeleteContext(hTempRC);  // temporario nao precisa mais
+	hTempRC = NULL;
+
+	// ------------------------------------------------------------------------------
+	// PASSO 1.3: Inicializar GLEW (Core Profile precisa de glewExperimental)
+	// ------------------------------------------------------------------------------
+	glewExperimental = GL_TRUE;  // FIX: obrigatorio para Core Profile
+	GLenum glewErr = glewInit();
+	if (glewErr != GLEW_OK)
+	{
+		g_ErrorReport.Write("GLEW Init Error: %s\r\n", glewGetErrorString(glewErr));
+		KillGLWindow();
+		MessageBox(NULL, "GLEW Init Error.", "Erro", MB_OK | MB_ICONERROR);
+		return FALSE;
+	}
+
+	// GLEW gera GL_INVALID_ENUM no Core Profile na primeira chamada — ignorar
+	glGetError();
+
 	InitGPUSystems();
 
-
-	glEnable(GL_MULTISAMPLE);
+	// FIX: GL_MULTISAMPLE ainda existe no Core, mas verifique se o driver suporta
+	if (GLEW_ARB_multisample)
+		glEnable(GL_MULTISAMPLE);
 
 	ShowWindow(gwinhandle->GethWnd(), SW_SHOW);
 
@@ -593,14 +680,16 @@ void CreateImGuiWindow()
 
 	ImGui_ImplWin32_Init(gwinhandle->GethWnd());
 
-	ImGui_ImplOpenGL2_Init();
+	// FIX PASSO 1: trocado de OpenGL2 (Legacy) para OpenGL3 (Core Profile)
+	ImGui_ImplOpenGL3_Init("#version 330");
 #endif // IMPLEMENT_IMGUI_WIN32
 }
 
 void DestroyImGuiWindow()
 {
 #ifdef IMPLEMENT_IMGUI_WIN32
-	ImGui_ImplOpenGL2_Shutdown();
+	// FIX PASSO 1: shutdown do backend OpenGL3
+	ImGui_ImplOpenGL3_Shutdown();
 
 	ImGui_ImplWin32_Shutdown();
 
@@ -1615,4 +1704,3 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR szCmdLin
 
 	return msg.wParam;
 }
-
