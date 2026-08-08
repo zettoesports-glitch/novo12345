@@ -272,7 +272,7 @@ public:
 	void Release();
 	void CreateBoundingBox();
 	void CreateVertexBuffer(int i, Mesh_t& mesh);
-	void RenderVertexBuffer(int i, Mesh_t* m, int vertex_index, vec3_t* vertices, vec2_t* textCoords, vec4_t* colors, int uMode, float alpha);
+	void RenderVertexBuffer(int i, Mesh_t* m, int vertex_index, vec3_t* vertices, vec2_t* textCoords, vec4_t* colors, int uMode, float alpha, vec3_t* normals = NULL);
 	void RenderVertexBufferSkinning(int i, Mesh_t* m, int vertex_index, vec3_t* vertices, vec2_t* textCoords, vec4_t* colors, int uMode, float alpha);
 	void SetupInstancing(int meshIndex, int count, const glm::mat4* instanceMatrices);
 	void RenderInstanced(int meshIndex, int count);

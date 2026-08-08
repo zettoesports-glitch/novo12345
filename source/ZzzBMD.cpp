@@ -1634,6 +1634,7 @@ void BMD::RenderMesh(int i, int RenderFlag, float Alpha, int BlendMesh, float Bl
 					auto vertices = RenderArrayVertices;
 					auto colors = RenderArrayColors;
 					auto textCoords = RenderArrayTexCoords;
+					auto meshNormals = RenderArrayNormals;
 
 					int target_vertex_index = -1;
 
@@ -1685,6 +1686,10 @@ void BMD::RenderMesh(int i, int RenderFlag, float Alpha, int BlendMesh, float Bl
 								VectorCopy(VertexTransform[i][source_vertex_index], vertices[target_vertex_index]);
 
 							int normalIndex = triangle->NormalIndex[k];
+
+							// FIX: normais transformadas por frame (antes nao eram atualizadas)
+							if (!wantGpuSkin)
+								VectorCopy(NormalTransform[i][normalIndex], meshNormals[target_vertex_index]);
 
 							TexCoord_t* textcoord = &m->TexCoords[triangle->TexCoordIndex[k]];
 							textCoords[target_vertex_index][0] = textcoord->TexCoordU;
@@ -1811,10 +1816,10 @@ void BMD::RenderMesh(int i, int RenderFlag, float Alpha, int BlendMesh, float Bl
 						}
 						else
 #endif
-						{
+{
 							// FIX: eliminado o caminho legado (glEnableClientState/glVertexPointer).
 							// Agora SEMPRE passa pelo RenderVertexBuffer (shaders em VAO/VBO).
-							this->RenderVertexBuffer(i, m, vertexCount, vertices, textCoords, colors, shaderMode, Alpha);
+							this->RenderVertexBuffer(i, m, vertexCount, vertices, textCoords, colors, shaderMode, Alpha, meshNormals);
 						}
 					}
 				}
@@ -3547,17 +3552,15 @@ void createViewMatrix(float* matrix, float* cameraPosition, float* cameraAngles,
 }
 
 
-void BMD::RenderVertexBuffer(int i, Mesh_t* m, int vertex_index, vec3_t* vertices, vec2_t* textCoords, vec4_t* colors, int uMode, float alpha)
+void BMD::RenderVertexBuffer(int i, Mesh_t* m, int vertex_index, vec3_t* vertices, vec2_t* textCoords, vec4_t* colors, int uMode, float alpha, vec3_t* normals)
 {
 	if (vertex_index <= 0 || m->VAO == 0)
 		return;
 
 	GLuint shader_id = gShaderGL->GetShaderId();
 	GLuint glow_id = 0;
-#ifdef SHADER_VERSION_TEST
 	if (g_bUseGlowShader)
 		glow_id = gShaderGL->GetShaderGlowId();
-#endif
 	if (g_bUseGlowShader && glow_id != 0)
 		shader_id = glow_id;
 	if (shader_id == 0)
@@ -3649,6 +3652,13 @@ void BMD::RenderVertexBuffer(int i, Mesh_t* m, int vertex_index, vec3_t* vertice
 
 	glBindBuffer(GL_ARRAY_BUFFER, m->VBO_Colors);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, vertex_index * sizeof(vec4_t), colors);
+
+	// FIX: atualizar normals por frame (faltava!)
+	if (normals != NULL && m->VBO_Normals != 0)
+	{
+		glBindBuffer(GL_ARRAY_BUFFER, m->VBO_Normals);
+		glBufferSubData(GL_ARRAY_BUFFER, 0, vertex_index * sizeof(vec3_t), normals);
+	}
 
 	// FIX: desabilita instancing para draw call unico (antes divisors ficavam =1)
 	for (int loc = 4; loc <= 7; loc++)
