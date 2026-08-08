@@ -39,6 +39,47 @@ using std::min;
 
 //-------------------------------------------------------------------------------------------------------------
 
+// =============================================================================
+// FIX PASSO 3.5: Terreno convertido de glBegin/glEnd + glEnableClientState
+// para glVertexAttribPointer + glDrawArrays (OpenGL 3.3 Core Profile)
+// =============================================================================
+
+inline void DrawTerrainFan4(
+    float* v0, float* v1, float* v2, float* v3,
+    float* t0, float* t1, float* t2, float* t3,
+    float* c0, float* c1, float* c2, float* c3,
+    bool alpha = false)
+{
+    float verts[4][3] = {
+        {v0[0], v0[1], v0[2]},
+        {v1[0], v1[1], v1[2]},
+        {v2[0], v2[1], v2[2]},
+        {v3[0], v3[1], v3[2]}
+    };
+    float texs[4][2] = {
+        {t0[0], t0[1]}, {t1[0], t1[1]}, {t2[0], t2[1]}, {t3[0], t3[1]}
+    };
+    float cols[4][4] = {
+        {c0[0], c0[1], c0[2], alpha ? c0[3] : 1.0f},
+        {c1[0], c1[1], c1[2], alpha ? c1[3] : 1.0f},
+        {c2[0], c2[1], c2[2], alpha ? c2[3] : 1.0f},
+        {c3[0], c3[1], c3[2], alpha ? c3[3] : 1.0f}
+    };
+
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, verts);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, texs);
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0, cols);
+
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+    glDisableVertexAttribArray(0);
+    glDisableVertexAttribArray(1);
+    glDisableVertexAttribArray(2);
+}
+
 int  TerrainFlag;
 bool ActiveTerrain = false;
 bool TerrainGrassEnable = true;
@@ -1644,9 +1685,7 @@ void Vertex__alpha3(float Alpha, bool Normal)
 void RenderFace(int Texture, int mx, int my)
 {
 	if (g_pOption->GetRenderTerrain() == false)
-	{
 		return;
-	}
 
 	int pMapIndex = gMapManager->FindMapIndex();
 
@@ -1661,82 +1700,32 @@ void RenderFace(int Texture, int mx, int my)
 	}
 	else if (gMapManager->IsCursedTemple())
 	{
-		if (Texture == 4)
-			EnableAlphaTest(TRUE);
-		else
-			DisableAlphaBlend();
-	}
-	else if (pMapIndex == WD_51HOME_6TH_CHAR)
-	{
-		if (Texture == 2)
-			EnableAlphaTest(TRUE);
-		else
-			DisableAlphaBlend();
-	}
-	else if (gMapManager->IsEmpireGuardian())
-	{
-		if (Texture == 10)
-			EnableAlphaTest(TRUE);
-		else
-			DisableAlphaBlend();
-	}
-	else if (IsKarutanMap())
-	{
-		if (Texture == 12)
-			EnableAlphaTest(TRUE);
-		else
-			DisableAlphaBlend();
-	}
-	else if (pMapIndex == WD_91GMACHERON1 || pMapIndex == WD_92GMACHERON2)
-	{
-		if (Texture == 9)
-			EnableAlphaTest(TRUE);
-		else
-			DisableAlphaBlend();
-	}
-	else if (pMapIndex == WD_113NIXIESLAKE)
-	{
-		if (Texture == 14)
-			EnableAlphaTest(TRUE);
-		else
-			DisableAlphaBlend();
-
-		if ((TerrainWall[TerrainIndex1] & TW_ATT5) != 0)
+		if (Texture == 100 || Texture == 101)
 		{
-			BindTexture(BITMAP_map_texture08);
-			glBegin(GL_TRIANGLE_FAN);
-			Vertex__alpha0(0.4000000, true);
-			Vertex__alpha1(0.4000000, true);
-			Vertex__alpha2(0.4000000, true);
-			Vertex__alpha3(0.4000000, true);
-			glEnd();
-
-			EnableAlphaTest(true);
-			BindTexture(BITMAP_MAPTILE + Texture);
-			glBegin(GL_TRIANGLE_FAN);
-			Vertex__alpha0((1.000000 - 0.4000000), false);
-			Vertex__alpha1((1.000000 - 0.4000000), false);
-			Vertex__alpha2((1.000000 - 0.4000000), false);
-			Vertex__alpha3((1.000000 - 0.4000000), false);
-			glEnd();
-			return;
+			if (Texture == 100)
+				EnableAlphaTest();
+			else if (Texture == 101)
+				EnableAlphaBlend();
+		}
+		else
+		{
+			DisableAlphaBlend();
 		}
 	}
 	else
 	{
-		if (Texture == 14)
-			EnableAlphaTest(TRUE);
-		else
-			DisableAlphaBlend();
+		DisableAlphaBlend();
 	}
 
 	BindTexture(BITMAP_MAPTILE + Texture);
-	glBegin(GL_TRIANGLE_FAN);
-	Vertex0();
-	Vertex1();
-	Vertex2();
-	Vertex3();
-	glEnd();
+
+	// FIX PASSO 3.5: glBegin/glEnd removido
+	DrawTerrainFan4(
+		TerrainVertex[0], TerrainVertex[1], TerrainVertex[2], TerrainVertex[3],
+		TerrainTextureCoord[0], TerrainTextureCoord[1], TerrainTextureCoord[2], TerrainTextureCoord[3],
+		PrimaryTerrainLight[TerrainIndex1], PrimaryTerrainLight[TerrainIndex2],
+		PrimaryTerrainLight[TerrainIndex3], PrimaryTerrainLight[TerrainIndex4]
+	);
 }
 
 void RenderFace_After(int Texture, int mx, int my)
@@ -1752,12 +1741,12 @@ void RenderFace_After(int Texture, int mx, int my)
 
 			BindTexture(BITMAP_MAPTILE + Texture);
 
-			glBegin(GL_TRIANGLE_FAN);
-			Vertex0();
-			Vertex1();
-			Vertex2();
-			Vertex3();
-			glEnd();
+			DrawTerrainFan4(
+				TerrainVertex[0], TerrainVertex[1], TerrainVertex[2], TerrainVertex[3],
+				TerrainTextureCoord[0], TerrainTextureCoord[1], TerrainTextureCoord[2], TerrainTextureCoord[3],
+				PrimaryTerrainLight[TerrainIndex1], PrimaryTerrainLight[TerrainIndex2],
+				PrimaryTerrainLight[TerrainIndex3], PrimaryTerrainLight[TerrainIndex4]
+			);
 		}
 	}
 }
@@ -1769,14 +1758,18 @@ void RenderFaceAlpha(int Texture, int mx, int my)
 		EnableAlphaTest();
 		BindTexture(BITMAP_MAPTILE + Texture);
 
-		glBegin(GL_TRIANGLE_FAN);
-		VertexAlpha0();
-		VertexAlpha1();
-		VertexAlpha2();
-		VertexAlpha3();
-		glEnd();
-	}
+		float c0[4] = {PrimaryTerrainLight[TerrainIndex1][0], PrimaryTerrainLight[TerrainIndex1][1], PrimaryTerrainLight[TerrainIndex1][2], TerrainMappingAlpha[TerrainIndex1]};
+		float c1[4] = {PrimaryTerrainLight[TerrainIndex2][0], PrimaryTerrainLight[TerrainIndex2][1], PrimaryTerrainLight[TerrainIndex2][2], TerrainMappingAlpha[TerrainIndex2]};
+		float c2[4] = {PrimaryTerrainLight[TerrainIndex3][0], PrimaryTerrainLight[TerrainIndex3][1], PrimaryTerrainLight[TerrainIndex3][2], TerrainMappingAlpha[TerrainIndex3]};
+		float c3[4] = {PrimaryTerrainLight[TerrainIndex4][0], PrimaryTerrainLight[TerrainIndex4][1], PrimaryTerrainLight[TerrainIndex4][2], TerrainMappingAlpha[TerrainIndex4]};
 
+		DrawTerrainFan4(
+			TerrainVertex[0], TerrainVertex[1], TerrainVertex[2], TerrainVertex[3],
+			TerrainTextureCoord[0], TerrainTextureCoord[1], TerrainTextureCoord[2], TerrainTextureCoord[3],
+			c0, c1, c2, c3,
+			true
+		);
+	}
 }
 
 void RenderFaceBlend(int Texture, int mx, int my)
@@ -1786,12 +1779,16 @@ void RenderFaceBlend(int Texture, int mx, int my)
 		EnableAlphaBlend();
 		BindTexture(BITMAP_MAPTILE + Texture);
 
-		glBegin(GL_TRIANGLE_FAN);
-		VertexBlend0();
-		VertexBlend1();
-		VertexBlend2();
-		VertexBlend3();
-		glEnd();
+		float c0[4] = {TerrainMappingAlpha[TerrainIndex1], TerrainMappingAlpha[TerrainIndex1], TerrainMappingAlpha[TerrainIndex1], 1.0f};
+		float c1[4] = {TerrainMappingAlpha[TerrainIndex2], TerrainMappingAlpha[TerrainIndex2], TerrainMappingAlpha[TerrainIndex2], 1.0f};
+		float c2[4] = {TerrainMappingAlpha[TerrainIndex3], TerrainMappingAlpha[TerrainIndex3], TerrainMappingAlpha[TerrainIndex3], 1.0f};
+		float c3[4] = {TerrainMappingAlpha[TerrainIndex4], TerrainMappingAlpha[TerrainIndex4], TerrainMappingAlpha[TerrainIndex4], 1.0f};
+
+		DrawTerrainFan4(
+			TerrainVertex[0], TerrainVertex[1], TerrainVertex[2], TerrainVertex[3],
+			TerrainTextureCoord[0], TerrainTextureCoord[1], TerrainTextureCoord[2], TerrainTextureCoord[3],
+			c0, c1, c2, c3
+		);
 	}
 }
 
@@ -1876,7 +1873,8 @@ static bool g_terrainGrassMerged = false;   // [Tier1-B] setado em RenderTerrain
 
 void RenderTerrainFace(float xf, float yf, int xi, int yi, float lodf)
 {
-	glAlphaFunc(GL_GREATER, 0.0000000);
+	// FIX PASSO 3.5: glAlphaFunc removido no Core Profile — usar discard no fragment shader
+	// glAlphaFunc(GL_GREATER, 0.0000000);
 
 	// [Tier1-C] Hoist: RenderTerrainVisual ja se auto-guarda com
 	// (InChaosCastle()==false || rand()%8); evita ~2 chamadas por face/frame fora do CC.
@@ -1953,9 +1951,7 @@ void RenderTerrainFace(float xf, float yf, int xi, int yi, float lodf)
 			}
 		}
 	}
-	// [Tier1-B] Grama desenhada inline na passada NORMAL (o corpo alpha-tested abaixo
-	// e generico: nao depende de TerrainFlag). Elimina a 2a varredura completa do
-	// frustrum (RenderTerrainFrustrum em modo TERRAIN_MAP_GRASS).
+	// [Tier1-B] Grama desenhada inline na passada NORMAL
 	if (!EditFlag && TerrainFlag == TERRAIN_MAP_NORMAL && g_terrainGrassMerged
 		&& TerrainGrassEnable && gMapManager->currentMap != WD_7ATLANSE && !IsDoppelGanger3())
 	{
@@ -1971,9 +1967,6 @@ void RenderTerrainFace(float xf, float yf, int xi, int yi, float lodf)
 				float Height = pBitmap->Height * 2.f;
 				BindTexture(Texture);
 
-				// [Tier1-B] na passada merged (NORMAL) ativa alpha-test+blend igual a
-				// antiga passada GRASS fazia em RenderTerrain (EnableAlphaTest global).
-				// EnableAlphaBlend() (PKField) desliga alpha-test -> cobre ambos os casos.
 				if (g_terrainGrassMerged)
 					EnableAlphaTest();
 				else if (gMapManager->IsPKField() || IsDoppelGanger2())
@@ -2005,9 +1998,7 @@ void RenderTerrainFace(float xf, float yf, int xi, int yi, float lodf)
 				}
 
 				vec4_t colors[4];
-
 				int terrain_index[] = { TerrainIndex1 , TerrainIndex2, TerrainIndex3, TerrainIndex4, };
-
 				for (int i = 0; i < 4; i++)
 				{
 					colors[i][3] = 1.0;
@@ -2016,37 +2007,19 @@ void RenderTerrainFace(float xf, float yf, int xi, int yi, float lodf)
 					colors[i][2] = PrimaryTerrainLight[terrain_index[i]][2];
 				}
 
-				glEnableClientState(GL_VERTEX_ARRAY);
-				glEnableClientState(GL_COLOR_ARRAY);
-				glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-
-				glVertexPointer(3, GL_FLOAT, 0, TerrainVertex);
-				glColorPointer(4, GL_FLOAT, 0, colors);
-				glTexCoordPointer(2, GL_FLOAT, 0, TerrainTextureCoord);
+				// FIX PASSO 3.5: glEnableClientState/glVertexPointer removidos
+				glEnableVertexAttribArray(0);  // position
+				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, TerrainVertex);
+				glEnableVertexAttribArray(1);  // texCoord
+				glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, TerrainTextureCoord);
+				glEnableVertexAttribArray(2);  // color
+				glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0, colors);
 
 				glDrawArrays(GL_QUADS, 0, 4);
 
-				glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-				glDisableClientState(GL_COLOR_ARRAY);
-				glDisableClientState(GL_VERTEX_ARRAY);
-
-				//glBegin(GL_QUADS);
-				//glTexCoord2f(TerrainTextureCoord[0][0], TerrainTextureCoord[0][1]);
-				//glColor3fv(PrimaryTerrainLight[TerrainIndex1]);
-				//glVertex3fv(TerrainVertex[0]);
-
-				//glTexCoord2f(TerrainTextureCoord[1][0], TerrainTextureCoord[1][1]);
-				//glColor3fv(PrimaryTerrainLight[TerrainIndex2]);
-				//glVertex3fv(TerrainVertex[1]);
-
-				//glTexCoord2f(TerrainTextureCoord[2][0], TerrainTextureCoord[2][1]);
-				//glColor3fv(PrimaryTerrainLight[TerrainIndex3]);
-				//glVertex3fv(TerrainVertex[2]);
-
-				//glTexCoord2f(TerrainTextureCoord[3][0], TerrainTextureCoord[3][1]);
-				//glColor3fv(PrimaryTerrainLight[TerrainIndex4]);
-				//glVertex3fv(TerrainVertex[3]);
-				//glEnd();
+				glDisableVertexAttribArray(0);
+				glDisableVertexAttribArray(1);
+				glDisableVertexAttribArray(2);
 
 				if (g_terrainGrassMerged || gMapManager->IsPKField() || IsDoppelGanger2())
 					DisableAlphaBlend();
@@ -2054,7 +2027,8 @@ void RenderTerrainFace(float xf, float yf, int xi, int yi, float lodf)
 		}
 	}
 
-	glAlphaFunc(GL_GREATER, 0.2500000);
+	// FIX PASSO 3.5: glAlphaFunc removido no Core Profile
+	// glAlphaFunc(GL_GREATER, 0.2500000);
 }
 
 void RenderTerrainFace_After(float xf, float yf, int xi, int yi, float lodf)
@@ -3390,26 +3364,25 @@ void TerrainBatchReset()
 
 void TerrainBatchFlush()
 {
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-	glEnableClientState(GL_COLOR_ARRAY);
-
 	for (int i = 0; i < g_batchGroupCount; i++)
 	{
 		if (g_batchCount[i] <= 0) continue;
 
 		BindTexture(g_batchTextureMap[i]);
 
-		glVertexPointer(3, GL_FLOAT, sizeof(TerrainBatchVertex), &g_batchVerts[i][0].x);
-		glTexCoordPointer(2, GL_FLOAT, sizeof(TerrainBatchVertex), &g_batchVerts[i][0].u);
-		glColorPointer(4, GL_FLOAT, sizeof(TerrainBatchVertex), &g_batchVerts[i][0].r);
+		glEnableVertexAttribArray(0);
+		glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(TerrainBatchVertex), &g_batchVerts[i][0].x);
+		glEnableVertexAttribArray(1);
+		glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(TerrainBatchVertex), &g_batchVerts[i][0].u);
+		glEnableVertexAttribArray(2);
+		glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(TerrainBatchVertex), &g_batchVerts[i][0].r);
 
 		glDrawArrays(GL_TRIANGLES, 0, g_batchCount[i]);
-	}
 
-	glDisableClientState(GL_COLOR_ARRAY);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-	glDisableClientState(GL_VERTEX_ARRAY);
+		glDisableVertexAttribArray(0);
+		glDisableVertexAttribArray(1);
+		glDisableVertexAttribArray(2);
+	}
 
 	TerrainBatchReset();
 }
