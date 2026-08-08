@@ -153,7 +153,10 @@ typedef struct _Mesh_t
 	GLuint VAO, VBO_Vertices, VBO_Normals, VBO_TexCoords, VBO_Colors, EBO;
 	GLuint VBO_BoneIndex; // GPU Skinning: indice do osso por vertice
 	GLuint VBO_BindPose;  // bind-pose STATIC (nunca sobrescrito pelo path CPU)
+	GLuint VBO_Instance;  // Instancing: matriz model por instancia (locations 4-7)
 	int    GpuVertexCount;
+	int    InstanceCount;
+	bool   bSupportsInstancing;
 
 	_Mesh_t()
 	{
@@ -180,6 +183,9 @@ typedef struct _Mesh_t
 		VBO_Colors = 0;
 		VBO_BoneIndex = 0;
 		VBO_BindPose = 0;
+		VBO_Instance = 0;
+		InstanceCount = 0;
+		bSupportsInstancing = false;
 		GpuVertexCount = 0;
 		EBO = 0;
 	}
@@ -268,6 +274,8 @@ public:
 	void CreateVertexBuffer(int i, Mesh_t& mesh);
 	void RenderVertexBuffer(int i, Mesh_t* m, int vertex_index, vec3_t* vertices, vec2_t* textCoords, vec4_t* colors, int uMode, float alpha);
 	void RenderVertexBufferSkinning(int i, Mesh_t* m, int vertex_index, vec3_t* vertices, vec2_t* textCoords, vec4_t* colors, int uMode, float alpha);
+	void SetupInstancing(int meshIndex, int count, const glm::mat4* instanceMatrices);
+	void RenderInstanced(int meshIndex, int count);
 	void EnsureMeshVerticesTransformed(int meshIndex);
 	void EnsureMeshNormalsTransformed(int meshIndex);
 

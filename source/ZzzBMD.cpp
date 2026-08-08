@@ -1040,6 +1040,9 @@ void BMD::ReleaseLightMaps()
 
 void BMD::BeginRender(float Alpha)
 {
+	// FIX: glPushMatrix ainda necessario porque o resto do codigo legado
+	// (RenderMeshTranslate, etc.) usa glTranslatef/glRotatef/glScalef.
+	// O shader moderno le de volta via glGetFloatv(GL_MODELVIEW_MATRIX).
 	glPushMatrix();
 	++g_GpuMatrixEpoch;
 #ifdef GPU_SKINNING
@@ -1809,37 +1812,9 @@ void BMD::RenderMesh(int i, int RenderFlag, float Alpha, int BlendMesh, float Bl
 						else
 #endif
 						{
-							// CLASSIC DRAW — reset VAO/shader 1x por frame (nao por mesh).
-							// Reset por mesh matava FPS ao girar (milhares de state changes).
-							extern int MoveSceneFrame;
-							static int s_classicGLFrame = -1;
-							if (s_classicGLFrame != MoveSceneFrame)
-							{
-								s_classicGLFrame = MoveSceneFrame;
-								glBindVertexArray(0);
-								glUseProgram(0);
-								for (int ai = 0; ai < 4; ++ai)
-									glDisableVertexAttribArray(ai);
-								glBindBuffer(GL_ARRAY_BUFFER, 0);
-								glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-							}
-
-							glEnableClientState(GL_VERTEX_ARRAY);
-							if (enableColor)
-								glEnableClientState(GL_COLOR_ARRAY);
-							glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-
-							glVertexPointer(3, GL_FLOAT, 0, vertices);
-							if (enableColor)
-								glColorPointer(4, GL_FLOAT, 0, colors);
-							glTexCoordPointer(2, GL_FLOAT, 0, textCoords);
-
-							glDrawArrays(GL_TRIANGLES, 0, vertexCount);
-
-							glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-							if (enableColor)
-								glDisableClientState(GL_COLOR_ARRAY);
-							glDisableClientState(GL_VERTEX_ARRAY);
+							// FIX: eliminado o caminho legado (glEnableClientState/glVertexPointer).
+							// Agora SEMPRE passa pelo RenderVertexBuffer (shaders em VAO/VBO).
+							this->RenderVertexBuffer(i, m, vertexCount, vertices, textCoords, colors, shaderMode, Alpha);
 						}
 					}
 				}
@@ -3594,6 +3569,7 @@ void BMD::RenderVertexBuffer(int i, Mesh_t* m, int vertex_index, vec3_t* vertice
 	static GLint s_locModel = -1, s_locView = -1, s_locProj = -1;
 	static GLint s_locMode = -1, s_locAlpha = -1, s_locTex = -1;
 	static GLint s_locTime = -1, s_locGlowInt = -1, s_locGlowColor = -1;
+	static GLint s_locNormalMatrix = -1, s_locAmbient = -1, s_locSpecular = -1, s_locShininess = -1, s_locAlphaCutoff = -1;
 	if (s_cachedShader != shader_id)
 	{
 		s_cachedShader = shader_id;
@@ -3606,6 +3582,11 @@ void BMD::RenderVertexBuffer(int i, Mesh_t* m, int vertex_index, vec3_t* vertice
 		s_locTime     = glGetUniformLocation(shader_id, "time");
 		s_locGlowInt  = glGetUniformLocation(shader_id, "glowIntensity");
 		s_locGlowColor= glGetUniformLocation(shader_id, "glowColor");
+		s_locNormalMatrix = glGetUniformLocation(shader_id, "normalMatrix");
+		s_locAmbient      = glGetUniformLocation(shader_id, "ambientStrength");
+		s_locSpecular     = glGetUniformLocation(shader_id, "specularStrength");
+		s_locShininess    = glGetUniformLocation(shader_id, "shininess");
+		s_locAlphaCutoff  = glGetUniformLocation(shader_id, "alphaCutoff");
 	}
 
 	// --- Cache de matrizes (uma vez por epoch = uma vez por objeto) ---
@@ -3626,6 +3607,20 @@ void BMD::RenderVertexBuffer(int i, Mesh_t* m, int vertex_index, vec3_t* vertice
 	if (s_locModel != -1) glUniformMatrix4fv(s_locModel, 1, GL_FALSE, s_identity);
 	if (s_locView  != -1) glUniformMatrix4fv(s_locView,  1, GL_FALSE, s_cachedModelView);
 	if (s_locProj  != -1) glUniformMatrix4fv(s_locProj,  1, GL_FALSE, s_cachedProjection);
+
+	// FIX: normalMatrix derivada da modelview (shaders modernos usam aNormal)
+	if (s_locNormalMatrix != -1)
+	{
+		glm::mat4 mv = glm::make_mat4(s_cachedModelView);
+		glm::mat3 normalMat = glm::transpose(glm::inverse(glm::mat3(mv)));
+		glUniformMatrix3fv(s_locNormalMatrix, 1, GL_FALSE, glm::value_ptr(normalMat));
+	}
+
+	// FIX: defaults dos uniforms de iluminacao (antes tinham inicializador no .fs)
+	if (s_locAmbient     != -1) glUniform1f(s_locAmbient, 0.5f);
+	if (s_locSpecular    != -1) glUniform1f(s_locSpecular, 0.3f);
+	if (s_locShininess   != -1) glUniform1f(s_locShininess, 32.0f);
+	if (s_locAlphaCutoff != -1) glUniform1f(s_locAlphaCutoff, 0.1f);
 
 	if (s_locMode  != -1) glUniform1i(s_locMode, uMode);
 	if (s_locAlpha != -1) glUniform1f(s_locAlpha, alpha);
@@ -3654,6 +3649,10 @@ void BMD::RenderVertexBuffer(int i, Mesh_t* m, int vertex_index, vec3_t* vertice
 
 	glBindBuffer(GL_ARRAY_BUFFER, m->VBO_Colors);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, vertex_index * sizeof(vec4_t), colors);
+
+	// FIX: desabilita instancing para draw call unico (antes divisors ficavam =1)
+	for (int loc = 4; loc <= 7; loc++)
+		glVertexAttribDivisor(loc, 0);
 
 	glDrawElements(GL_TRIANGLES, vertex_index, GL_UNSIGNED_SHORT, 0);
 
@@ -3738,6 +3737,91 @@ void BMD::RenderVertexBufferSkinning(int i, Mesh_t* m, int vertex_index, vec3_t*
 #else
 	RenderVertexBuffer(i, m, vertex_index, vertices, textCoords, colors, uMode, alpha);
 #endif
+}
+
+void BMD::SetupInstancing(int meshIndex, int count, const glm::mat4* instanceMatrices)
+{
+	if (meshIndex < 0 || meshIndex >= NumMeshs)
+		return;
+
+	Mesh_t& mesh = Meshs[meshIndex];
+	if (!mesh.VAO || !mesh.VBO_Instance)
+		return;
+
+	static const int MAX_INSTANCES_PER_DRAW = 1000;
+	count = min(count, MAX_INSTANCES_PER_DRAW);
+
+	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO_Instance);
+	glBufferData(GL_ARRAY_BUFFER, count * sizeof(glm::mat4), instanceMatrices, GL_DYNAMIC_DRAW);
+
+	mesh.InstanceCount = count;
+	mesh.bSupportsInstancing = true;
+
+	glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+void BMD::RenderInstanced(int meshIndex, int count)
+{
+	if (meshIndex < 0 || meshIndex >= NumMeshs)
+		return;
+
+	Mesh_t& mesh = Meshs[meshIndex];
+	if (!mesh.VAO || mesh.InstanceCount <= 0)
+		return;
+
+	GLuint shaderId = gShaderGL->GetShaderId();
+	if (shaderId == 0)
+		return;
+
+	gShaderGL->RenderShader(CShaderGL::SHADER_DEFAULT);
+
+	// Instancing: a matriz model vem do VBO de instancia (locations 4-7).
+	// View e projection continuam vindo do pipeline (camera).
+	GLfloat modelviewRaw[16];
+	GLfloat projectionRaw[16];
+	glGetFloatv(GL_MODELVIEW_MATRIX, modelviewRaw);
+	glGetFloatv(GL_PROJECTION_MATRIX, projectionRaw);
+
+	glm::mat4 modelViewMatrix = glm::make_mat4(modelviewRaw);
+	glm::mat4 projectionMatrix = glm::make_mat4(projectionRaw);
+
+	// FIX: em instancing, "view" = modelView (sem model separado),
+	// e "model" e identidade (a matriz real vem por atributo de instancia).
+	gShaderGL->setMat4("model", glm::mat4(1.0f));
+	gShaderGL->setMat4("view", modelViewMatrix);
+	gShaderGL->setMat4("projection", projectionMatrix);
+
+	glm::mat3 normalMat = glm::transpose(glm::inverse(glm::mat3(modelViewMatrix)));
+
+	GLint program;
+	glGetIntegerv(GL_CURRENT_PROGRAM, &program);
+	if (program > 0)
+	{
+		GLint loc = glGetUniformLocation(program, "normalMatrix");
+		if (loc != -1)
+			glUniformMatrix3fv(loc, 1, GL_FALSE, glm::value_ptr(normalMat));
+
+		loc = glGetUniformLocation(program, "ambientStrength");
+		if (loc != -1) glUniform1f(loc, 0.5f);
+		loc = glGetUniformLocation(program, "specularStrength");
+		if (loc != -1) glUniform1f(loc, 0.3f);
+		loc = glGetUniformLocation(program, "shininess");
+		if (loc != -1) glUniform1f(loc, 32.0f);
+		loc = glGetUniformLocation(program, "alphaCutoff");
+		if (loc != -1) glUniform1f(loc, 0.1f);
+	}
+
+	glBindVertexArray(mesh.VAO);
+
+	// Habilita instancing (divisor = 1)
+	for (int loc = 4; loc <= 7; loc++)
+		glVertexAttribDivisor(loc, 1);
+
+	// FIX: 1 so draw call para N instancias — de N draw calls para 1.
+	glDrawElementsInstanced(GL_TRIANGLES, mesh.NumTriangles * 3, GL_UNSIGNED_SHORT, 0, count);
+
+	glBindVertexArray(0);
+	glUseProgram(0);
 }
 
 void BMD::CreateVertexBuffer(int i, Mesh_t& mesh)
