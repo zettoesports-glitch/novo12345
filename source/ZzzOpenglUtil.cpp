@@ -1450,6 +1450,8 @@ void RenderColorBitmap(int Texture, float x, float y, float Width, float Height,
 	BindTexture(Texture);
 
 	float p[4][2];
+	float c[4][2];
+	float col[4][4];  // FIX PASSO 2: array de cores por vertice
 
 	y = WindowHeight - y;
 
@@ -1458,50 +1460,38 @@ void RenderColorBitmap(int Texture, float x, float y, float Width, float Height,
 	p[2][0] = x + Width; p[2][1] = y - Height;
 	p[3][0] = x + Width; p[3][1] = y;
 
-	float c[4][2];
 	TEXCOORD(c[0], u, v);
 	TEXCOORD(c[3], u + uWidth, v);
 	TEXCOORD(c[2], u + uWidth, v + vHeight);
 	TEXCOORD(c[1], u, v + vHeight);
 
-	/*glBegin(GL_TRIANGLE_FAN);
+	// FIX PASSO 2: glColor4ub removido no Core — cor como atributo de vertice
+	float r = static_cast<float>((color & 0xff)) / 255.f;
+	float g = static_cast<float>((color >> 8) & 0xff) / 255.f;
+	float b = static_cast<float>((color >> 16) & 0xff) / 255.f;
+	float a = static_cast<float>((color >> 24) & 0xff) / 255.f;
 
 	for (int i = 0; i < 4; i++)
 	{
-		glColor4ub(static_cast<GLubyte>((color & 0xff)),         //Rad
-			static_cast<GLubyte>((color >> 8) & 0xff),      //Green
-			static_cast<GLubyte>((color >> 16) & 0xff),     //Blue
-			static_cast<GLubyte>((color >> 24) & 0xff));   //Alpha
-
-		glTexCoord2f(c[i][0], c[i][1]);
-		glVertex2f(p[i][0], p[i][1]);
-
-		glColor4f(1.f, 1.f, 1.f, 1.f);
+		col[i][0] = r;
+		col[i][1] = g;
+		col[i][2] = b;
+		col[i][3] = a;
 	}
-	glEnd();*/
 
-	// Habilitar el uso de punteros de v�rtices y coordenadas de textura
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+	// FIX PASSO 2: glEnableClientState/glVertexPointer/glTexCoordPointer removidos
+	glEnableVertexAttribArray(0);  // position
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, p);
+	glEnableVertexAttribArray(1);  // texCoord
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, c);
+	glEnableVertexAttribArray(2);  // color
+	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0, col);
 
-	// Pasar los datos de los v�rtices y las coordenadas de textura a OpenGL
-	glVertexPointer(2, GL_FLOAT, 0, p);  // 2 componentes por v�rtice (x, y)
-	glTexCoordPointer(2, GL_FLOAT, 0, c);  // 2 componentes por coordenada de textura (u, v)
+	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
-	glColor4ub(static_cast<GLubyte>((color & 0xff)),         //Rad
-			static_cast<GLubyte>((color >> 8) & 0xff),      //Green
-			static_cast<GLubyte>((color >> 16) & 0xff),     //Blue
-			static_cast<GLubyte>((color >> 24) & 0xff));   //Alpha
-
-	// Dibujar los v�rtices como un cuadrado utilizando un tri�ngulo en abanico
-	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);  // 4 v�rtices en total
-
-	// Restaurar el color si fue cambiado
-	glColor4f(1.f, 1.f, 1.f, 1.f);  // Restaurar color blanco sin transparencia
-
-	// Deshabilitar los estados de cliente
-	glDisableClientState(GL_VERTEX_ARRAY);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+	glDisableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+	glDisableVertexAttribArray(2);
 }
 
 void RenderBitmap(int Texture, float x, float y, float Width, float Height, float u, float v, float uWidth, float vHeight, bool Scale, bool StartScale, float Alpha)
@@ -1521,6 +1511,7 @@ void RenderBitmap(int Texture, float x, float y, float Width, float Height, floa
 
 	float p[4][2];
 	float c[4][2];
+	float col[4][4];  // FIX PASSO 2: array de cores por vertice
 
 	y = WindowHeight - y;
 
@@ -1534,32 +1525,28 @@ void RenderBitmap(int Texture, float x, float y, float Width, float Height, floa
 	TEXCOORD(c[2], u + uWidth, v + vHeight);
 	TEXCOORD(c[1], u, v + vHeight);
 
-	// Habilitar el uso de punteros de v�rtices y coordenadas de textura
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-
-	// Pasar los datos de los v�rtices y las coordenadas de textura a OpenGL
-	glVertexPointer(2, GL_FLOAT, 0, p);  // 2 componentes por v�rtice (x, y)
-	glTexCoordPointer(2, GL_FLOAT, 0, c);  // 2 componentes por coordenada de textura (u, v)
-
-	// Si hay transparencia (Alpha), habilita la mezcla de color
-	if (Alpha > 0.f)
+	// FIX PASSO 2: glColor4f removido no Core — cor como atributo de vertice
+	for (int i = 0; i < 4; i++)
 	{
-		glColor4f(1.f, 1.f, 1.f, Alpha);  // Configurar color con Alpha
+		col[i][0] = 1.f;
+		col[i][1] = 1.f;
+		col[i][2] = 1.f;
+		col[i][3] = (Alpha > 0.f) ? Alpha : 1.f;
 	}
 
-	// Dibujar los v�rtices como un cuadrado utilizando un tri�ngulo en abanico
-	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);  // 4 v�rtices en total
+	// FIX PASSO 2: glEnableClientState/glVertexPointer/glTexCoordPointer removidos
+	glEnableVertexAttribArray(0);  // position
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, p);
+	glEnableVertexAttribArray(1);  // texCoord
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, c);
+	glEnableVertexAttribArray(2);  // color
+	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0, col);
 
-	// Restaurar el color si fue cambiado
-	if (Alpha > 0.f)
-	{
-		glColor4f(1.f, 1.f, 1.f, 1.f);  // Restaurar color blanco sin transparencia
-	}
+	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
-	// Deshabilitar los estados de cliente
-	glDisableClientState(GL_VERTEX_ARRAY);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+	glDisableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+	glDisableVertexAttribArray(2);
 }
 
 void RenderNoBitmap(int Texture, float x, float y, float Width, float Height, float u, float v, float uWidth, float vHeight, bool Scale, bool StartScale, float Alpha)
@@ -1578,6 +1565,8 @@ void RenderNoBitmap(int Texture, float x, float y, float Width, float Height, fl
 	BindTexture(Texture);
 
 	float p[4][2];
+	float c[4][2];
+	float col[4][4];  // FIX PASSO 2: array de cores por vertice
 
 	y = WindowHeight - y;
 
@@ -1586,54 +1575,33 @@ void RenderNoBitmap(int Texture, float x, float y, float Width, float Height, fl
 	p[2][0] = x + Width; p[2][1] = y - Height;
 	p[3][0] = x + Width; p[3][1] = y;
 
-	float c[4][2];
 	TEXCOORD(c[0], u, v);
 	TEXCOORD(c[3], u + uWidth, v);
 	TEXCOORD(c[2], u + uWidth, v + vHeight);
 	TEXCOORD(c[1], u, v + vHeight);
 
-	/*glBegin(GL_TRIANGLE_FAN);
+	// FIX PASSO 2: glColor4f removido no Core — cor como atributo de vertice
 	for (int i = 0; i < 4; i++)
 	{
-		if (Alpha > 0.f)
-		{
-			glColor4f(1.f, 1.f, 1.f, Alpha);
-		}
-		glTexCoord2f(c[i][0], c[i][1]);
-		glVertex2f(p[i][0], p[i][1]);
-		if (Alpha > 0.f)
-		{
-			glColor4f(1.f, 1.f, 1.f, 1.f);
-		}
-	}
-	glEnd();*/
-
-	// Habilitar el uso de punteros de v�rtices y coordenadas de textura
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-
-	// Pasar los datos de los v�rtices y las coordenadas de textura a OpenGL
-	glVertexPointer(2, GL_FLOAT, 0, p);  // 2 componentes por v�rtice (x, y)
-	glTexCoordPointer(2, GL_FLOAT, 0, c);  // 2 componentes por coordenada de textura (u, v)
-
-	// Si hay transparencia (Alpha), habilita la mezcla de color
-	if (Alpha > 0.f)
-	{
-		glColor4f(1.f, 1.f, 1.f, Alpha);  // Configurar color con Alpha
+		col[i][0] = 1.f;
+		col[i][1] = 1.f;
+		col[i][2] = 1.f;
+		col[i][3] = (Alpha > 0.f) ? Alpha : 1.f;
 	}
 
-	// Dibujar los v�rtices como un cuadrado utilizando un tri�ngulo en abanico
-	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);  // 4 v�rtices en total
+	// FIX PASSO 2: glEnableClientState/glVertexPointer/glTexCoordPointer removidos
+	glEnableVertexAttribArray(0);  // position
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, p);
+	glEnableVertexAttribArray(1);  // texCoord
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, c);
+	glEnableVertexAttribArray(2);  // color
+	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0, col);
 
-	// Restaurar el color si fue cambiado
-	if (Alpha > 0.f)
-	{
-		glColor4f(1.f, 1.f, 1.f, 1.f);  // Restaurar color blanco sin transparencia
-	}
+	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
-	// Deshabilitar los estados de cliente
-	glDisableClientState(GL_VERTEX_ARRAY);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
+	glDisableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+	glDisableVertexAttribArray(2);
 }
 
 void RenderBitmapRotate(int Texture, float x, float y, float Width, float Height, float Rotate, float u, float v, float uWidth, float vHeight, bool Scale)
@@ -1668,14 +1636,37 @@ void RenderBitmapRotate(int Texture, float x, float y, float Width, float Height
 	TEXCOORD(c[2], u + uWidth, v + vHeight);
 	TEXCOORD(c[1], u, v + vHeight);
 
-	glBegin(GL_TRIANGLE_FAN);
+	// FIX PASSO 2: glBegin/glEnd/glTexCoord2f/glVertex2f removidos no Core
+	// Convertido para arrays + glVertexAttribPointer + glDrawArrays
+	float vertices[4][2];
+	float texCoords[4][2];
+	float colors[4][4];
+
 	for (int i = 0; i < 4; i++)
 	{
-		glTexCoord2f(c[i][0], c[i][1]);
 		VectorRotate(p[i], Matrix, p2[i]);
-		glVertex2f(p2[i][0] + x, p2[i][1] + y);
+		vertices[i][0] = p2[i][0] + x;
+		vertices[i][1] = p2[i][1] + y;
+		texCoords[i][0] = c[i][0];
+		texCoords[i][1] = c[i][1];
+		colors[i][0] = 1.f;
+		colors[i][1] = 1.f;
+		colors[i][2] = 1.f;
+		colors[i][3] = 1.f;
 	}
-	glEnd();
+
+	glEnableVertexAttribArray(0);  // position
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, vertices);
+	glEnableVertexAttribArray(1);  // texCoord
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, texCoords);
+	glEnableVertexAttribArray(2);  // color
+	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0, colors);
+
+	glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+	glDisableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+	glDisableVertexAttribArray(2);
 }
 
 void RenderBitRotate(int Texture, float x, float y, float Width, float Height, float Rotate)

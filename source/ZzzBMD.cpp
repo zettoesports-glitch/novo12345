@@ -2338,6 +2338,7 @@ void BMD::RenderObjectBoundingBox()
 	glPushMatrix();
 	glTranslatef(BodyOrigin[0], BodyOrigin[1], BodyOrigin[2]);
 	glScalef(BodyScale, BodyScale, BodyScale);
+
 	for (int i = 0; i < NumBones; i++)
 	{
 		Bone_t* b = &Bones[i];
@@ -2349,68 +2350,107 @@ void BMD::RenderObjectBoundingBox()
 				VectorTransform(b->BoundingVertices[j], BoneTransform[i], BoundingVertices[j]);
 			}
 
-			glBegin(GL_QUADS);
-			//glBegin(GL_LINES);
-			glColor3f(0.2f, 0.2f, 0.2f);
-			glTexCoord2f(1.0F, 1.0F);
-			glVertex3fv(BoundingVertices[7]);
-			glTexCoord2f(1.0F, 0.0F);
-			glVertex3fv(BoundingVertices[6]);
-			glTexCoord2f(0.0F, 0.0F);
-			glVertex3fv(BoundingVertices[4]);
-			glTexCoord2f(0.0F, 1.0F);
-			glVertex3fv(BoundingVertices[5]);
+			// FIX PASSO 2: glBegin/glEnd/glColor3f/glTexCoord2f/glVertex3fv
+			// removidos no OpenGL 3.3 Core Profile.
+			// Convertido para arrays + glVertexAttribPointer + glDrawArrays.
 
-			glColor3f(0.2f, 0.2f, 0.2f);
-			glTexCoord2f(0.0F, 1.0F);
-			glVertex3fv(BoundingVertices[0]);
-			glTexCoord2f(1.0F, 1.0F);
-			glVertex3fv(BoundingVertices[2]);
-			glTexCoord2f(1.0F, 0.0F);
-			glVertex3fv(BoundingVertices[3]);
-			glTexCoord2f(0.0F, 0.0F);
-			glVertex3fv(BoundingVertices[1]);
+			// 6 faces do cubo, 4 vertices por face = 24 vertices
+			// Cada vertice: posicao (3) + texCoord (2) + cor (3)
+			float vertices[24 * 3];   // 24 vertices * 3 componentes (x,y,z)
+			float texCoords[24 * 2];  // 24 vertices * 2 componentes (u,v)
+			float colors[24 * 3];     // 24 vertices * 3 componentes (r,g,b)
 
-			glColor3f(0.6f, 0.6f, 0.6f);
-			glTexCoord2f(1.0F, 1.0F);
-			glVertex3fv(BoundingVertices[7]);
-			glTexCoord2f(1.0F, 0.0F);
-			glVertex3fv(BoundingVertices[3]);
-			glTexCoord2f(0.0F, 0.0F);
-			glVertex3fv(BoundingVertices[2]);
-			glTexCoord2f(0.0F, 1.0F);
-			glVertex3fv(BoundingVertices[6]);
+			int idx = 0;
 
-			glColor3f(0.6f, 0.6f, 0.6f);
-			glTexCoord2f(0.0F, 1.0F);
-			glVertex3fv(BoundingVertices[0]);
-			glTexCoord2f(1.0F, 1.0F);
-			glVertex3fv(BoundingVertices[1]);
-			glTexCoord2f(1.0F, 0.0F);
-			glVertex3fv(BoundingVertices[5]);
-			glTexCoord2f(0.0F, 0.0F);
-			glVertex3fv(BoundingVertices[4]);
+			// Face 1 (cor 0.2, 0.2, 0.2)
+			float c1[3] = {0.2f, 0.2f, 0.2f};
+			float tc[4][2] = {{1.0f,1.0f}, {1.0f,0.0f}, {0.0f,0.0f}, {0.0f,1.0f}};
+			int f1[4] = {7, 6, 4, 5};
+			for (int k = 0; k < 4; k++) {
+				vertices[idx*3+0] = BoundingVertices[f1[k]][0];
+				vertices[idx*3+1] = BoundingVertices[f1[k]][1];
+				vertices[idx*3+2] = BoundingVertices[f1[k]][2];
+				texCoords[idx*2+0] = tc[k][0];
+				texCoords[idx*2+1] = tc[k][1];
+				colors[idx*3+0] = c1[0]; colors[idx*3+1] = c1[1]; colors[idx*3+2] = c1[2];
+				idx++;
+			}
 
-			glColor3f(0.4f, 0.4f, 0.4f);
-			glTexCoord2f(1.0F, 1.0F);
-			glVertex3fv(BoundingVertices[7]);
-			glTexCoord2f(1.0F, 0.0F);
-			glVertex3fv(BoundingVertices[5]);
-			glTexCoord2f(0.0F, 0.0F);
-			glVertex3fv(BoundingVertices[1]);
-			glTexCoord2f(0.0F, 1.0F);
-			glVertex3fv(BoundingVertices[3]);
+			// Face 2 (cor 0.2, 0.2, 0.2)
+			int f2[4] = {0, 2, 3, 1};
+			for (int k = 0; k < 4; k++) {
+				vertices[idx*3+0] = BoundingVertices[f2[k]][0];
+				vertices[idx*3+1] = BoundingVertices[f2[k]][1];
+				vertices[idx*3+2] = BoundingVertices[f2[k]][2];
+				texCoords[idx*2+0] = tc[k][0];
+				texCoords[idx*2+1] = tc[k][1];
+				colors[idx*3+0] = c1[0]; colors[idx*3+1] = c1[1]; colors[idx*3+2] = c1[2];
+				idx++;
+			}
 
-			glColor3f(0.4f, 0.4f, 0.4f);
-			glTexCoord2f(0.0F, 1.0F);
-			glVertex3fv(BoundingVertices[0]);
-			glTexCoord2f(1.0F, 1.0F);
-			glVertex3fv(BoundingVertices[4]);
-			glTexCoord2f(1.0F, 0.0F);
-			glVertex3fv(BoundingVertices[6]);
-			glTexCoord2f(0.0F, 0.0F);
-			glVertex3fv(BoundingVertices[2]);
-			glEnd();
+			// Face 3 (cor 0.6, 0.6, 0.6)
+			float c2[3] = {0.6f, 0.6f, 0.6f};
+			int f3[4] = {7, 3, 2, 6};
+			for (int k = 0; k < 4; k++) {
+				vertices[idx*3+0] = BoundingVertices[f3[k]][0];
+				vertices[idx*3+1] = BoundingVertices[f3[k]][1];
+				vertices[idx*3+2] = BoundingVertices[f3[k]][2];
+				texCoords[idx*2+0] = tc[k][0];
+				texCoords[idx*2+1] = tc[k][1];
+				colors[idx*3+0] = c2[0]; colors[idx*3+1] = c2[1]; colors[idx*3+2] = c2[2];
+				idx++;
+			}
+
+			// Face 4 (cor 0.6, 0.6, 0.6)
+			int f4[4] = {0, 1, 5, 4};
+			for (int k = 0; k < 4; k++) {
+				vertices[idx*3+0] = BoundingVertices[f4[k]][0];
+				vertices[idx*3+1] = BoundingVertices[f4[k]][1];
+				vertices[idx*3+2] = BoundingVertices[f4[k]][2];
+				texCoords[idx*2+0] = tc[k][0];
+				texCoords[idx*2+1] = tc[k][1];
+				colors[idx*3+0] = c2[0]; colors[idx*3+1] = c2[1]; colors[idx*3+2] = c2[2];
+				idx++;
+			}
+
+			// Face 5 (cor 0.4, 0.4, 0.4)
+			float c3[3] = {0.4f, 0.4f, 0.4f};
+			int f5[4] = {7, 5, 1, 3};
+			for (int k = 0; k < 4; k++) {
+				vertices[idx*3+0] = BoundingVertices[f5[k]][0];
+				vertices[idx*3+1] = BoundingVertices[f5[k]][1];
+				vertices[idx*3+2] = BoundingVertices[f5[k]][2];
+				texCoords[idx*2+0] = tc[k][0];
+				texCoords[idx*2+1] = tc[k][1];
+				colors[idx*3+0] = c3[0]; colors[idx*3+1] = c3[1]; colors[idx*3+2] = c3[2];
+				idx++;
+			}
+
+			// Face 6 (cor 0.4, 0.4, 0.4)
+			int f6[4] = {0, 4, 6, 2};
+			for (int k = 0; k < 4; k++) {
+				vertices[idx*3+0] = BoundingVertices[f6[k]][0];
+				vertices[idx*3+1] = BoundingVertices[f6[k]][1];
+				vertices[idx*3+2] = BoundingVertices[f6[k]][2];
+				texCoords[idx*2+0] = tc[k][0];
+				texCoords[idx*2+1] = tc[k][1];
+				colors[idx*3+0] = c3[0]; colors[idx*3+1] = c3[1]; colors[idx*3+2] = c3[2];
+				idx++;
+			}
+
+			// Enviar para GPU e desenhar
+			glEnableVertexAttribArray(0);  // position
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, vertices);
+			glEnableVertexAttribArray(1);  // texCoord
+			glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, texCoords);
+			glEnableVertexAttribArray(2);  // color
+			glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 0, colors);
+
+			glDrawArrays(GL_QUADS, 0, 24);
+
+			glDisableVertexAttribArray(0);
+			glDisableVertexAttribArray(1);
+			glDisableVertexAttribArray(2);
 		}
 	}
 	glPopMatrix();
