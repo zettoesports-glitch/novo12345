@@ -1,0 +1,26 @@
+void RenderFPSOverlay(HWND hWnd)
+{
+	char buf[512];
+	const char* accType = "FREE";
+	if (CharacterMachine) {
+		switch (CharacterMachine->AccountLevel) {
+			case 1: accType = "VIP1"; break;
+			case 2: accType = "VIP2"; break;
+			case 3: accType = "VIP3"; break;
+		}
+	}
+	
+	char cleanGPU[128] = {0};
+	if (g_FpsCounter.gpuName[0]) {
+		strcpy_s(cleanGPU, g_FpsCounter.gpuName);
+		char* slash = strchr(cleanGPU, '/');
+		if (slash) *slash = 0;
+	}
+	
+	sprintf_s(buf, "[MU] MuOnline | Nick: %s | %s | GPU: %s | Mouse X:%.0f Y:%.0f",
+		Hero && Hero->ID[0] ? Hero->ID : "---", accType,
+		cleanGPU[0] ? cleanGPU : "Detecting...",
+		MouseX, MouseY);
+	
+	SetWindowText(hWnd, buf);
+}

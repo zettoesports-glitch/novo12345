@@ -1,0 +1,26 @@
+DPI / Resolucao / Fullscreen — fix 1080p & 1440p
+================================================
+
+Arquivos:
+- source\Winmain.cpp      -> EnableDpiAwarenessClean() (Per-Monitor V2)
+- source\WINHANDLE.cpp    -> Create/Resize client size exato + ScreenType 2 escala limpa
+- Client_2\Data\Resolutions.xml -> +2560x1440, 2560x1080, 3440x1440, 3840x2160
+- MainInfo.ini            -> ScreenType=2 recomendado
+
+Como testar:
+1) Recompilar Main.exe
+2) Windows: preferivel escala 100%; com 125%/150% o DPI V2 evita blur
+3) No launcher/registry: Resolution = index de Resolutions.xml (lista enxuta)
+   - 0 = 800x600
+   - 1 = 1024x768
+   - 2 = 1280x720
+   - 3 = 1366x768
+   - 4 = 1600x900
+   - 5 = 1920x1080   (principal)
+   - 6 = 2560x1440   (principal)
+4) WindowMode 1 = janela | 0 = fullscreen borderless
+5) MainInfo ScreenType = 2
+
+Registry: HKCU\SOFTWARE\Webzen\Mu2\Config
+  Resolution (DWORD)  <- 1080p = 5 | 1440p = 6
+  WindowMode (DWORD)
