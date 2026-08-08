@@ -1,11 +1,10 @@
 #version 330 core
 // =============================================================================
-// shader.fs
+// forward_transparent.fs
 // -----------------------------------------------------------------------------
-// Fragment shader principal para objetos/personagens.
-// FIX: convertido de compatibility para core profile.
-// FIX: removidos inicializadores de uniform (ilegais em GLSL 330 puro).
-// Usa common_lighting.glsl para iluminação Blinn-Phong.
+// Forward shading para transparência real (alpha blend).
+// Roda em pass separado DEPOIS do deferred lighting.
+// Usa a mesma interface VS_OUT do shader.vs (gbuffer.vs).
 // =============================================================================
 
 in VS_OUT {
@@ -23,11 +22,23 @@ uniform float ambientStrength;
 uniform float specularStrength;
 uniform float shininess;
 
+// Parâmetros de glow (antes hardcoded em glow.fs)
+uniform bool  enableGlow;
+uniform float glowIntensity;
+uniform vec3  glowColor;
+uniform float glowPulseSpeed;
+uniform float time;
+
 layout (location = 0) out vec4 FragColor;
 
 void main()
 {
     vec4 texColor = texture(texture1, fs_in.TexCoord);
+    float alpha = texColor.a * fs_in.BakedLight.a;
+
+    // Transparência real — alpha blend, NÃO discard (exceto totalmente invisível)
+    if (alpha < 0.01)
+        discard;
 
     Material mat;
     mat.albedo           = texColor.rgb * fs_in.BakedLight.rgb;
@@ -39,5 +50,12 @@ void main()
         fs_in.WorldPos, fs_in.WorldNormal, viewPos,
         lightPos, lightColor, mat);
 
-    FragColor = vec4(result, texColor.a * fs_in.BakedLight.a);
+    // Glow opcional (wings, partículas, efeitos)
+    if (enableGlow)
+    {
+        float pulse = sin(time * glowPulseSpeed) * 0.5 + 0.5;
+        result += glowColor * glowIntensity * pulse;
+    }
+
+    FragColor = vec4(result, alpha);
 }

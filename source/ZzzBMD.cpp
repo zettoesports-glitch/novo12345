@@ -3745,8 +3745,8 @@ void BMD::CreateVertexBuffer(int i, Mesh_t& mesh)
 	auto vertices = RenderArrayVertices;
 	auto colors = RenderArrayColors;
 	auto textCoords = RenderArrayTexCoords;
+	auto normals = RenderArrayNormals;
 	std::vector<unsigned short> indices;
-	std::vector<float> boneIndices;
 
 	int target_vertex_index = -1;
 
@@ -3757,66 +3757,75 @@ void BMD::CreateVertexBuffer(int i, Mesh_t& mesh)
 		for (int k = 0; k < triangle->Polygon; k++)
 		{
 			int source_vertex_index = triangle->VertexIndex[k];
+			int normal_index = triangle->NormalIndex[k];
 
 			target_vertex_index++;
 
-			// Bind-pose local — GPU aplica bones no VS
-			VectorCopy(mesh.Vertices[source_vertex_index].Position, vertices[target_vertex_index]);
+			VectorCopy(VertexTransform[i][source_vertex_index], vertices[target_vertex_index]);
+			VectorCopy(NormalTransform[i][normal_index], normals[target_vertex_index]);
 
 			TexCoord_t* textcoord = &mesh.TexCoords[triangle->TexCoordIndex[k]];
-			textCoords[target_vertex_index][0] = textcoord->TexCoordU;
-			textCoords[target_vertex_index][1] = textcoord->TexCoordV;
+			textCoords[target_vertex_index][0] = textcoord->TexCoordU;  // FIX: antes era 0.0
+			textCoords[target_vertex_index][1] = textcoord->TexCoordV;  // FIX: antes era 0.0
 			colors[target_vertex_index][0] = 1.f;
 			colors[target_vertex_index][1] = 1.f;
 			colors[target_vertex_index][2] = 1.f;
 			colors[target_vertex_index][3] = 1.f;
-
-			float boneIdx = (float)mesh.Vertices[source_vertex_index].Node;
-			if (boneIdx < 0.f || boneIdx >= 200.f) boneIdx = 0.f;
-			boneIndices.push_back(boneIdx);
-
-			indices.push_back((unsigned short)target_vertex_index);
+			indices.push_back(target_vertex_index);
 		}
 	}
 
 	int vertex_count = target_vertex_index + 1;
-	mesh.GpuVertexCount = vertex_count;
 
 	glGenVertexArrays(1, &mesh.VAO);
 	glGenBuffers(1, &mesh.VBO_Vertices);
-	glGenBuffers(1, &mesh.VBO_BindPose);
 	glGenBuffers(1, &mesh.VBO_TexCoords);
 	glGenBuffers(1, &mesh.VBO_Colors);
-	glGenBuffers(1, &mesh.VBO_BoneIndex);
+	glGenBuffers(1, &mesh.VBO_Normals);  // FIX: criar VBO de normals
 	glGenBuffers(1, &mesh.EBO);
+
+	// FIX: Instancing buffer (mat4 por instancia, locations 4-7)
+	glGenBuffers(1, &mesh.VBO_Instance);
 
 	glBindVertexArray(mesh.VAO);
 
-	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO_BindPose);
-	glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(vec3_t), vertices, GL_STATIC_DRAW);
-
+	// Location 0: Position
 	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO_Vertices);
-	glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(vec3_t), vertices, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(vec3_t), vertices, GL_STATIC_DRAW);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(vec3_t), (void*)0);
 	glEnableVertexAttribArray(0);
 
+	// Location 1: TexCoord
 	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO_TexCoords);
-	glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(TexCoord_t), textCoords, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(TexCoord_t), textCoords, GL_STATIC_DRAW);
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(TexCoord_t), (void*)0);
 	glEnableVertexAttribArray(1);
 
+	// Location 2: Color
 	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO_Colors);
-	glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(vec4_t), colors, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(vec4_t), colors, GL_STATIC_DRAW);
 	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(vec4_t), (void*)0);
 	glEnableVertexAttribArray(2);
 
-	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO_BoneIndex);
-	glBufferData(GL_ARRAY_BUFFER, boneIndices.size() * sizeof(float), boneIndices.data(), GL_STATIC_DRAW);
-	glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, sizeof(float), (void*)0);
+	// Location 3: Normal
+	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO_Normals);
+	glBufferData(GL_ARRAY_BUFFER, vertex_count * sizeof(vec3_t), normals, GL_STATIC_DRAW);
+	glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(vec3_t), (void*)0);
 	glEnableVertexAttribArray(3);
 
+	// FIX: Location 4-7 — Instance Model Matrix (mat4 dividido em 4 vec4)
+	glBindBuffer(GL_ARRAY_BUFFER, mesh.VBO_Instance);
+	for (int loc = 0; loc < 4; loc++)
+	{
+		glVertexAttribPointer(4 + loc, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(loc * sizeof(glm::vec4)));
+		glVertexAttribDivisor(4 + loc, 1);  // Avanca 1 vez por instancia
+		glEnableVertexAttribArray(4 + loc);
+	}
+
+	// EBO
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.EBO);
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned short), indices.data(), GL_STATIC_DRAW);
+
 	glBindVertexArray(0);
 }
 

@@ -1,39 +1,43 @@
-#version 330 compatibility
-out vec4 FragColor;
+#version 330 core
+// =============================================================================
+// character.fs
+// -----------------------------------------------------------------------------
+// Fragment shader para personagens.
+// FIX: convertido de compatibility para core profile.
+// FIX: removidos inicializadores de uniform (ilegais em GLSL 330 puro).
+// Usa common_lighting.glsl para iluminação Blinn-Phong.
+// =============================================================================
 
-in vec2 TexCoord;
-in vec4 to_light;
-in vec3 FragPos;
-in vec3 Normal;
+in VS_OUT {
+    vec2  TexCoord;
+    vec3  WorldPos;
+    vec3  WorldNormal;
+    vec4  BakedLight;
+} fs_in;
 
 uniform sampler2D texture1;
-uniform vec3 lightPos = vec3(0.0, 1000.0, 1000.0);
-uniform vec3 viewPos;
-uniform float ambientStrength = 0.5;
-uniform float specularStrength = 0.3;
+uniform vec3  lightPos;
+uniform vec3  lightColor;
+uniform vec3  viewPos;
+uniform float ambientStrength;
+uniform float specularStrength;
+uniform float shininess;
 
-void main() {
-    float alpha = texture(texture1, TexCoord).a * to_light.a;
-    if(alpha < 0.1) discard;
+layout (location = 0) out vec4 FragColor;
 
-    vec4 textureColor = texture(texture1, TexCoord);
-    
-    // Ambient
-    vec3 ambient = ambientStrength * to_light.rgb;
-    
-    // Diffuse
-    vec3 norm = normalize(Normal);
-    vec3 lightDir = normalize(lightPos - FragPos);
-    float diff = max(dot(norm, lightDir), 0.0);
-    vec3 diffuse = diff * to_light.rgb;
-    
-    // Specular
-    vec3 viewDir = normalize(-FragPos); // In View Space, camera is at origin
-    vec3 reflectDir = reflect(-lightDir, norm);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32);
-    vec3 specular = specularStrength * spec * vec3(1.0);
-    
-    vec3 result = (ambient + diffuse + specular) * textureColor.rgb;
-    
-    FragColor = vec4(result, alpha);
+void main()
+{
+    vec4 texColor = texture(texture1, fs_in.TexCoord);
+
+    Material mat;
+    mat.albedo           = texColor.rgb * fs_in.BakedLight.rgb;
+    mat.ambientStrength  = ambientStrength;
+    mat.specularStrength = specularStrength;
+    mat.shininess        = shininess;
+
+    vec3 result = ComputeBlinnPhong(
+        fs_in.WorldPos, fs_in.WorldNormal, viewPos,
+        lightPos, lightColor, mat);
+
+    FragColor = vec4(result, texColor.a * fs_in.BakedLight.a);
 }

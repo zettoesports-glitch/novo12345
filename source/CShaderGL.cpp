@@ -1,10 +1,9 @@
-#include "stdafx.h"
+#include "StdAfx.h"
 #include "CShaderGL.h"
 
 #ifdef SHADER_VERSION_TEST
 #include "Utilities/Log/muConsoleDebug.h"
-#include <fstream>
-#include <sstream>
+#endif
 
 CShaderGL::CShaderGL()
     : shader_id(0),
@@ -12,7 +11,7 @@ CShaderGL::CShaderGL()
       shader_glow_id(0),
       shader_character_id(0),
       shader_colorized_id(0),
-      shader_skinning_id(0),
+      shader_forward_transparent_id(0),
       m_ProjectionMatrix(glm::mat4(1.0f)),
       m_bInitialized(false)
 {
@@ -34,6 +33,8 @@ void CShaderGL::Init()
     if (m_bInitialized)
         return;
 
+    // FIX: eliminado #ifdef SHADER_VERSION_TEST. Agora SEMPRE carrega shaders.
+    // O caminho legado foi removido do ZzzBMD.cpp.
     this->shader_id =
         this->LoadShaderProgram("Shaders/shader.vs", "Shaders/shader.fs");
     this->shader_terrain_id =
@@ -44,15 +45,16 @@ void CShaderGL::Init()
         this->LoadShaderProgram("Shaders/character.vs", "Shaders/character.fs");
     this->shader_colorized_id =
         this->LoadShaderProgram("Shaders/colorize.vs", "Shaders/colorize.fs");
-    this->shader_skinning_id =
-        this->LoadShaderProgram("Shaders/skinning.vs", "Shaders/skinning.fs");
-
+    this->shader_forward_transparent_id =
+        this->LoadShaderProgram("Shaders/shader.vs", "Shaders/forward_transparent.fs");
 
     m_bInitialized = (shader_id != 0);
 
     if (!m_bInitialized)
     {
+#ifdef SHADER_VERSION_TEST
         g_ConsoleDebug->Write(MCD_ERROR, "[CShaderGL] Falha ao inicializar shaders");
+#endif
     }
 }
 
@@ -63,278 +65,197 @@ void CShaderGL::Shutdown()
     if (shader_glow_id != 0) glDeleteProgram(shader_glow_id);
     if (shader_character_id != 0) glDeleteProgram(shader_character_id);
     if (shader_colorized_id != 0) glDeleteProgram(shader_colorized_id);
-    if (shader_skinning_id != 0) glDeleteProgram(shader_skinning_id);
+    if (shader_forward_transparent_id != 0) glDeleteProgram(shader_forward_transparent_id);
 
     shader_id = 0;
     shader_terrain_id = 0;
     shader_glow_id = 0;
     shader_character_id = 0;
     shader_colorized_id = 0;
-    shader_skinning_id = 0;
+    shader_forward_transparent_id = 0;
     m_bInitialized = false;
-
-    ClearUniformCache();
 }
 
 void CShaderGL::RenderShader(ShaderType type)
 {
     GLuint shader = 0;
-
     switch (type)
     {
-        case SHADER_TERRAIN:
-            shader = shader_terrain_id;
-            break;
-        case SHADER_GLOW:
-            shader = shader_glow_id;
-            break;
-        case SHADER_CHARACTER:
-            shader = shader_character_id;
-            break;
-        case SHADER_COLORIZED:
-            shader = shader_colorized_id;
-            break;
-        default:
-            shader = shader_id;
-            break;
+        case SHADER_TERRAIN:             shader = shader_terrain_id; break;
+        case SHADER_GLOW:                shader = shader_glow_id; break;
+        case SHADER_CHARACTER:           shader = shader_character_id; break;
+        case SHADER_COLORIZED:           shader = shader_colorized_id; break;
+        case SHADER_FORWARD_TRANSPARENT: shader = shader_forward_transparent_id; break;
+        default:                         shader = shader_id; break;
     }
-
     if (shader != 0)
-    {
         glUseProgram(shader);
-    }
 }
 
 bool CShaderGL::CheckedShader(ShaderType type) const
 {
     switch (type)
     {
-        case SHADER_TERRAIN:
-            return shader_terrain_id != 0;
-        case SHADER_GLOW:
-            return shader_glow_id != 0;
-        case SHADER_CHARACTER:
-            return shader_character_id != 0;
-        case SHADER_COLORIZED:
-            return shader_colorized_id != 0;
-        default:
-            return shader_id != 0;
+        case SHADER_TERRAIN:             return shader_terrain_id != 0;
+        case SHADER_GLOW:                return shader_glow_id != 0;
+        case SHADER_CHARACTER:           return shader_character_id != 0;
+        case SHADER_COLORIZED:           return shader_colorized_id != 0;
+        case SHADER_FORWARD_TRANSPARENT: return shader_forward_transparent_id != 0;
+        default:                         return shader_id != 0;
     }
 }
 
-GLuint CShaderGL::GetShaderId() const
-{
-    return shader_id;
-}
-
-GLuint CShaderGL::GetShaderTerrainId() const
-{
-    return shader_terrain_id;
-}
-
-GLuint CShaderGL::GetShaderGlowId() const
-{
-    return shader_glow_id;
-}
-
-GLuint CShaderGL::GetShaderCharacterId() const
-{
-    return shader_character_id;
-}
-
-GLuint CShaderGL::GetShaderColorizedId() const
-{
-    return shader_colorized_id;
-}
-
-GLuint CShaderGL::GetShaderSkinningId() const
-{
-    return shader_skinning_id;
-}
-
-GLuint CShaderGL::LoadShaderProgram(const char* vertexShaderFile,
-                                    const char* fragmentShaderFile)
-{
-    std::string vertexShaderSource, fragmentShaderSource;
-
-    if (!this->readshader(vertexShaderFile, vertexShaderSource) ||
-        !this->readshader(fragmentShaderFile, fragmentShaderSource))
-        return 0;
-
-    GLuint vertexShader =
-        this->run_shader(vertexShaderSource.c_str(), GL_VERTEX_SHADER);
-    GLuint fragmentShader =
-        this->run_shader(fragmentShaderSource.c_str(), GL_FRAGMENT_SHADER);
-
-    if (vertexShader == 0 || fragmentShader == 0)
-        return 0;
-
-    GLuint programId = glCreateProgram();
-    glAttachShader(programId, vertexShader);
-    glAttachShader(programId, fragmentShader);
-    glLinkProgram(programId);
-
-    GLint success;
-    glGetProgramiv(programId, GL_LINK_STATUS, &success);
-    if (!success)
-    {
-        char infoLog[512];
-        glGetProgramInfoLog(programId, 512, NULL, infoLog);
-        g_ConsoleDebug->Write(MCD_ERROR, "Shader Program Link Error (%s/%s): %s",
-                              vertexShaderFile, fragmentShaderFile, infoLog);
-        return 0;
-    }
-
-    glDeleteShader(vertexShader);
-    glDeleteShader(fragmentShader);
-    return programId;
-}
+GLuint CShaderGL::GetShaderId() const { return shader_id; }
+GLuint CShaderGL::GetShaderTerrainId() const { return shader_terrain_id; }
+GLuint CShaderGL::GetShaderGlowId() const { return shader_glow_id; }
+GLuint CShaderGL::GetShaderCharacterId() const { return shader_character_id; }
+GLuint CShaderGL::GetShaderColorizedId() const { return shader_colorized_id; }
+GLuint CShaderGL::GetShaderForwardTransparentId() const { return shader_forward_transparent_id; }
 
 bool CShaderGL::readshader(const char* filename, std::string& shader_text)
 {
-    std::ifstream file(filename);
-    if (!file.is_open())
-    {
-        // Try adding Data/ prefix if missing, common in MuOnline
-        std::string altPath = "Data/";
-        altPath += filename;
-        file.open(altPath);
-        if (!file.is_open())
-        {
-            g_ConsoleDebug->Write(MCD_ERROR, "Failed to open shader file: %s",
-                                  filename);
-            return false;
-        }
-    }
+    FILE* file = fopen(filename, "rb");
+    if (!file)
+        return false;
 
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    shader_text = buffer.str();
-    file.close();
+    fseek(file, 0, SEEK_END);
+    long size = ftell(file);
+    fseek(file, 0, SEEK_SET);
+
+    shader_text.resize(size);
+    fread(&shader_text[0], 1, size, file);
+    fclose(file);
     return true;
 }
 
 GLuint CShaderGL::run_shader(const char* shader_text, GLenum type)
 {
-    GLuint shaderId = glCreateShader(type);
-    glShaderSource(shaderId, 1, &shader_text, NULL);
-    glCompileShader(shaderId);
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &shader_text, nullptr);
+    glCompileShader(shader);
 
     GLint success;
-    glGetShaderiv(shaderId, GL_COMPILE_STATUS, &success);
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
     if (!success)
     {
         char infoLog[512];
-        glGetShaderInfoLog(shaderId, 512, NULL, infoLog);
-        g_ConsoleDebug->Write(MCD_ERROR, "Shader Compilation Error: %s", infoLog);
+        glGetShaderInfoLog(shader, 512, nullptr, infoLog);
+#ifdef SHADER_VERSION_TEST
+        g_ConsoleDebug->Write(MCD_ERROR, "[CShaderGL] Shader compile error: %s", infoLog);
+#endif
+        glDeleteShader(shader);
         return 0;
     }
-    return shaderId;
+    return shader;
 }
 
-static glm::mat4 g_ProjectionMatrix = glm::mat4(1.0f);
-
-void CShaderGL::run_projection()
+// =============================================================================
+// FIX CRÍTICO: LoadShaderProgram agora injeta common_lighting.glsl
+// automaticamente no fragment shader, logo após a linha #version.
+// Isso elimina duplicação de código de iluminação entre shaders.
+// =============================================================================
+GLuint CShaderGL::LoadShaderProgram(const char* vertexShaderFile, const char* fragmentShaderFile)
 {
-    GLint program;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-    if (program > 0)
+    std::string vsCode, fsCode;
+    if (!readshader(vertexShaderFile, vsCode))
     {
-        GLint loc = glGetUniformLocation(program, "projection");
-        if (loc != -1)
+#ifdef SHADER_VERSION_TEST
+        g_ConsoleDebug->Write(MCD_ERROR, "[CShaderGL] Failed to load vertex shader: %s", vertexShaderFile);
+#endif
+        return 0;
+    }
+    if (!readshader(fragmentShaderFile, fsCode))
+    {
+#ifdef SHADER_VERSION_TEST
+        g_ConsoleDebug->Write(MCD_ERROR, "[CShaderGL] Failed to load fragment shader: %s", fragmentShaderFile);
+#endif
+        return 0;
+    }
+
+    // FIX: injetar common_lighting.glsl no fragment shader
+    std::string commonLighting;
+    if (readshader("Shaders/common_lighting.glsl", commonLighting))
+    {
+        size_t versionEnd = fsCode.find('\n');
+        if (versionEnd != std::string::npos)
         {
-            glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(g_ProjectionMatrix));
+            std::string versionLine = fsCode.substr(0, versionEnd + 1);
+            std::string rest = fsCode.substr(versionEnd + 1);
+            fsCode = versionLine + commonLighting + rest;
         }
     }
-}
 
-void CShaderGL::SetPerspective(float Fov, float Aspect, float ZNear,
-                               float ZFar)
-{
-    g_ProjectionMatrix = glm::perspective(glm::radians(Fov), Aspect, ZNear, ZFar);
-    m_ProjectionMatrix = g_ProjectionMatrix;
-    this->run_projection();
-}
+    GLuint vs = run_shader(vsCode.c_str(), GL_VERTEX_SHADER);
+    GLuint fs = run_shader(fsCode.c_str(), GL_FRAGMENT_SHADER);
 
-void CShaderGL::ClearUniformCache()
-{
-    m_UniformCache.clear();
-}
+    if (vs == 0 || fs == 0)
+        return 0;
 
-GLint CShaderGL::GetUniformLocationCached(GLuint program, const char* name) const
-{
-    auto progIt = m_UniformCache.find(program);
-    if (progIt == m_UniformCache.end())
+    GLuint program = glCreateProgram();
+    glAttachShader(program, vs);
+    glAttachShader(program, fs);
+    glLinkProgram(program);
+
+    GLint success;
+    glGetProgramiv(program, GL_LINK_STATUS, &success);
+    if (!success)
     {
-        auto& newMap = const_cast<std::unordered_map<GLuint, std::unordered_map<std::string, GLint>>&>(m_UniformCache)[program];
-        GLint loc = glGetUniformLocation(program, name);
-        newMap[name] = loc;
-        return loc;
+        char infoLog[512];
+        glGetProgramInfoLog(program, 512, nullptr, infoLog);
+#ifdef SHADER_VERSION_TEST
+        g_ConsoleDebug->Write(MCD_ERROR, "[CShaderGL] Program link error: %s", infoLog);
+#endif
+        glDeleteProgram(program);
+        program = 0;
     }
-    auto nameIt = progIt->second.find(name);
-    if (nameIt != progIt->second.end())
-        return nameIt->second;
-    GLint loc = glGetUniformLocation(program, name);
-    const_cast<std::unordered_map<std::string, GLint>&>(progIt->second)[name] = loc;
-    return loc;
+
+    glDeleteShader(vs);
+    glDeleteShader(fs);
+    return program;
 }
 
 void CShaderGL::setBool(const char* name, bool value) const
 {
-    GLint program;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-    if (program > 0)
-        glUniform1i(GetUniformLocationCached(program, name), (int)value);
+    GLint loc = glGetUniformLocation(shader_id, name);
+    if (loc >= 0) glUniform1i(loc, (int)value);
 }
-
 void CShaderGL::setInt(const char* name, int value) const
 {
-    GLint program;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-    if (program > 0)
-        glUniform1i(GetUniformLocationCached(program, name), value);
+    GLint loc = glGetUniformLocation(shader_id, name);
+    if (loc >= 0) glUniform1i(loc, value);
 }
-
 void CShaderGL::setFloat(const char* name, float value) const
 {
-    GLint program;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-    if (program > 0)
-        glUniform1f(GetUniformLocationCached(program, name), value);
+    GLint loc = glGetUniformLocation(shader_id, name);
+    if (loc >= 0) glUniform1f(loc, value);
 }
-
 void CShaderGL::setVec2(const char* name, float x, float y) const
 {
-    GLint program;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-    if (program > 0)
-        glUniform2f(GetUniformLocationCached(program, name), x, y);
+    GLint loc = glGetUniformLocation(shader_id, name);
+    if (loc >= 0) glUniform2f(loc, x, y);
 }
-
 void CShaderGL::setVec3(const char* name, float x, float y, float z) const
 {
-    GLint program;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-    if (program > 0)
-        glUniform3f(GetUniformLocationCached(program, name), x, y, z);
+    GLint loc = glGetUniformLocation(shader_id, name);
+    if (loc >= 0) glUniform3f(loc, x, y, z);
 }
-
-void CShaderGL::setVec4(const char* name, float x, float y, float z,
-                        float w) const
+void CShaderGL::setVec4(const char* name, float x, float y, float z, float w) const
 {
-    GLint program;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-    if (program > 0)
-        glUniform4f(GetUniformLocationCached(program, name), x, y, z, w);
+    GLint loc = glGetUniformLocation(shader_id, name);
+    if (loc >= 0) glUniform4f(loc, x, y, z, w);
 }
-
-void CShaderGL::setMat4(const char* name, glm::mat4& matrix) const
+void CShaderGL::setMat4(const char* name, const glm::mat4& matrix) const  // FIX: const&
 {
-    GLint program;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &program);
-    if (program > 0)
-        glUniformMatrix4fv(GetUniformLocationCached(program, name), 1, GL_FALSE,
-                           glm::value_ptr(matrix));
+    GLint loc = glGetUniformLocation(shader_id, name);
+    if (loc >= 0) glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(matrix));
 }
 
-#endif // SHADER_VERSION_TEST
+void CShaderGL::SetPerspective(float fov, float aspect, float nearPlane, float farPlane)
+{
+    m_ProjectionMatrix = glm::perspective(glm::radians(fov), aspect, nearPlane, farPlane);
+}
+
+void CShaderGL::run_projection()
+{
+    // placeholder para compatibilidade
+}

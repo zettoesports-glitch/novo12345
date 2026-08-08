@@ -1,31 +1,43 @@
 #version 330 core
+// =============================================================================
+// skinning.fs
+// -----------------------------------------------------------------------------
+// Fragment shader para skinning (personagens com esqueleto).
+// FIX: removidos inicializadores de uniform (ilegais em GLSL 330 puro).
+// FIX: interface padronizada VS_OUT.
+// Usa common_lighting.glsl para iluminação Blinn-Phong.
+// =============================================================================
 
-in  vec2 TexCoord;
-in  vec4 to_light;
-out vec4 FragColor;
+in VS_OUT {
+    vec2  TexCoord;
+    vec3  WorldPos;
+    vec3  WorldNormal;
+    vec4  BakedLight;
+} fs_in;
 
 uniform sampler2D texture1;
-uniform int       uMode;
-uniform float     Alpha;
-uniform float     uAlphaCutoff = 0.05;
+uniform vec3  lightPos;
+uniform vec3  lightColor;
+uniform vec3  viewPos;
+uniform float ambientStrength;
+uniform float specularStrength;
+uniform float shininess;
+
+layout (location = 0) out vec4 FragColor;
 
 void main()
 {
-    if (uMode == 3)
-    {
-        FragColor = vec4(to_light.rgb, Alpha);
-        return;
-    }
+    vec4 texColor = texture(texture1, fs_in.TexCoord);
 
-    vec4 t = texture(texture1, TexCoord);
-    float a = t.a * Alpha;
-    // Alpha-to-coverage em shader + preserva alpha (sem MSAA, sem forçar 1.0)
-    float af = fwidth(a);
-    float coverage = smoothstep(uAlphaCutoff - af, uAlphaCutoff + af, a);
-    if (coverage <= 0.004) discard;
+    Material mat;
+    mat.albedo           = texColor.rgb * fs_in.BakedLight.rgb;
+    mat.ambientStrength  = ambientStrength;
+    mat.specularStrength = specularStrength;
+    mat.shininess        = shininess;
 
-    if (uMode == 2)
-        FragColor = vec4(t.rgb, a * coverage);
-    else
-        FragColor = vec4(t.rgb * to_light.rgb, a * coverage);
+    vec3 result = ComputeBlinnPhong(
+        fs_in.WorldPos, fs_in.WorldNormal, viewPos,
+        lightPos, lightColor, mat);
+
+    FragColor = vec4(result, texColor.a * fs_in.BakedLight.a);
 }

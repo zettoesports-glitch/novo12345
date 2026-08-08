@@ -1,15 +1,41 @@
-#version 330 compatibility
+#version 330 core
+// =============================================================================
+// terrain.vs
+// -----------------------------------------------------------------------------
+// Vertex shader para terreno.
+// FIX: convertido de compatibility para core profile.
+// Layout compatível com ZzzBMD.cpp::CreateVertexBuffer:
+//   location 0 = posição (vec3)
+//   location 1 = texCoord (vec2)
+//   location 2 = cor/luz baked (vec4)
+//   location 3 = normal (vec3)
+// =============================================================================
 
-out vec2 TexCoord;
-out vec3 Normal;
-out vec3 FragPos;
-out vec4 VertColor;
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec2 aTexCoord;
+layout (location = 2) in vec4 aColor;
+layout (location = 3) in vec3 aNormal;
 
-void main() {
-    FragPos = vec3(gl_ModelViewMatrix * gl_Vertex);
-    Normal = gl_NormalMatrix * gl_Normal;  
-    TexCoord = gl_MultiTexCoord0.xy;
-    VertColor = gl_Color;
-    
-    gl_Position = gl_ModelViewProjectionMatrix * gl_Vertex;
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+uniform mat3 normalMatrix;
+
+out VS_OUT {
+    vec2  TexCoord;
+    vec3  FragPos;
+    vec3  Normal;
+    vec4  VertColor;
+} vs_out;
+
+void main()
+{
+    vec4 worldPos = model * vec4(aPos, 1.0);
+
+    vs_out.FragPos    = vec3(view * worldPos);
+    vs_out.Normal     = normalize(normalMatrix * aNormal);
+    vs_out.TexCoord   = aTexCoord;
+    vs_out.VertColor  = aColor;
+
+    gl_Position = projection * view * worldPos;
 }

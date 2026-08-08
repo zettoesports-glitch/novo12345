@@ -1,41 +1,55 @@
-// MU Season 6 - Colorization Shader (Vertex)
-// Portado de GLSL 120 para 330 core
-
 #version 330 core
+// =============================================================================
+// colorize.vs
+// -----------------------------------------------------------------------------
+// Vertex shader para colorização dinâmica (item grade, classe, time).
+// FIX: layout VAO corrigido para bater com ZzzBMD.cpp::CreateVertexBuffer:
+//   location 0 = posição (vec3)
+//   location 1 = texCoord (vec2)
+//   location 2 = cor/luz baked (vec4)
+//   location 3 = normal (vec3)
+// =============================================================================
 
-layout(location = 0) in vec3 aPosition;
-layout(location = 1) in vec2 aTexCoord;
-layout(location = 2) in vec3 aColor;
+layout (location = 0) in vec3 aPos;
+layout (location = 1) in vec2 aTexCoord;
+layout (location = 2) in vec4 aColor;
+layout (location = 3) in vec3 aNormal;
 
-uniform mat4 uModel;
-uniform mat4 uView;
-uniform mat4 uProj;
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+uniform mat3 normalMatrix;
 
-uniform int uColorMode;
-uniform int uColorValue;
+uniform int uColorMode;       // 0=None, 1=ItemGrade, 2=Class, 3=Custom, 4=Elemental, 5=Team
+uniform int uColorValue;      // Índice para lookup na paleta
 uniform sampler1D uColorPalette;
 
-out vec3 fragColor;
-out vec3 fragNormal;
-out vec2 fragTexCoord;
-out vec3 fragPos;
+out VS_OUT {
+    vec2  TexCoord;
+    vec4  BakedLight;
+    vec3  WorldNormal;
+    vec3  WorldPos;
+} vs_out;
 
 void main()
 {
+    vec4 worldPos = model * vec4(aPos, 1.0);
+
+    vs_out.WorldPos    = worldPos.xyz;
+    vs_out.WorldNormal = normalize(normalMatrix * aNormal);
+    vs_out.TexCoord    = aTexCoord;
+
+    // Colorização via paleta 1D
     if (uColorMode > 0)
     {
-        float colorIndex = float(uColorValue) / 255.0;
-        vec3 paletteColor = texture(uColorPalette, colorIndex).rgb;
-        fragColor = aColor * paletteColor;
+        float idx = float(uColorValue) / 255.0;
+        vec3 palette = texture(uColorPalette, idx).rgb;
+        vs_out.BakedLight = vec4(aColor.rgb * palette, aColor.a);
     }
     else
     {
-        fragColor = aColor;
+        vs_out.BakedLight = aColor;
     }
 
-    fragNormal = normalize(mat3(uModel) * vec3(0.0, 0.0, 1.0));
-    fragTexCoord = aTexCoord;
-    fragPos = vec3(uModel * vec4(aPosition, 1.0));
-
-    gl_Position = uProj * uView * uModel * vec4(aPosition, 1.0);
+    gl_Position = projection * view * worldPos;
 }

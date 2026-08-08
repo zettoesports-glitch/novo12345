@@ -1,116 +1,79 @@
-// stdafx.h : include file for standard system include files,
+// StdAfx.h — Precompiled Header
+// FIX: MSVC 2022+ (v143) não exporta mais funções C de <cmath> para o
+// namespace global quando compilando como C++. Incluímos <math.h> (header C)
+// explicitamente para manter compatibilidade com código legado do MU.
+
 #pragma once
 
-// warining
-#pragma warning(disable : 4067)
-#pragma warning(disable : 4099)
-#pragma warning(disable : 4786)
-#pragma warning(disable : 4800)
-#pragma warning(disable : 4996)
-#pragma warning(disable : 4244)
-#pragma warning(disable : 4237)
-#pragma warning(disable : 4305)
-#pragma warning(disable : 4503)
-#pragma warning(disable : 4267)
-#pragma warning(disable : 4091)
-#pragma warning(disable : 4819)
-#pragma warning(disable : 4505)
-#pragma warning(disable : 4100)
-#pragma warning(disable : 4127)
-#pragma warning(disable : 4702)
-#pragma warning(disable : 4838)
-#pragma warning(disable : 5208)
-
-#pragma warning(disable : 28159)
-#pragma warning(disable : 26812)
-#pragma warning(disable : 28251)
-#pragma warning(disable : 26451)
-#pragma warning(disable : 26819)
-
-// Exclude rarely-used stuff from Windows headers
 #define WIN32_LEAN_AND_MEAN
+#define _CRT_SECURE_NO_WARNINGS
+#define _USE_MATH_DEFINES
 
-#ifndef _USE_32BIT_TIME_T
-#ifndef _WIN64
-#define _USE_32BIT_TIME_T
-#endif //_WIN64
-#endif //_USE_32BIT_TIME_T
-
-#define _CRT_SECURE_NO_DEPRECATE
-#define _CRT_NONSTDC_NO_DEPRECATE
-
-#pragma warning(push, 3)
+// ============================================================
+// FIX CRÍTICO DE COMPILAÇÃO
+// math.h (C) deve vir ANTES de qualquer include C++ que use
+// fabsf, cosf, sinf, sqrtf, powf, etc.
+// ============================================================
+#include <math.h>
 
 #include <windows.h>
 
-// windows
-#include <WinSock2.h>
-#include <mmsystem.h>
-#include <shellapi.h>
-
-// c runtime
-#include <assert.h>
-#include <conio.h>
-#include <malloc.h>
-#include <math.h>
-#include <mbstring.h>
-#include <memory.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <tchar.h>
-#include <time.h>
-
-#include <algorithm>
-#include <deque>
-#include <list>
-#include <map>
-#include <queue>
+// Headers C++ padrão
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cmath>
 #include <string>
 #include <vector>
+#include <map>
+#include <algorithm>
+#include <chrono>        // FIX: steady_clock.h e w_ObjectInfo.h usam std::chrono
+#include <unordered_map> // FIX: steady_clock.h usa std::unordered_map
 
-#include <chrono> // Para std::chrono::milliseconds
-#include <random>
-#include <thread> // Para std::this_thread::sleep_for
+// OpenGL
+#include <GL/glew.h>
+#include <GL/gl.h>
+#include <GL/glu.h>
 
-#include <cmath>
-#include <fstream>
-#include <unordered_map>
-#pragma warning(pop)
+// GLM
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
-#include <ft2build.h>
-#include FT_FREETYPE_H
-// opengl - GLEW MUST BE INCLUDED BEFORE GL.H
-#include <gl/glew.h>
-#include <gl/gl.h>
+// ============================================================
+// FIX: Forward declarations para evitar dependência circular.
+// ZzzObject.h usa BMD na linha 14, mas ZzzBMD.h depende de ZzzObject.h.
+// ============================================================
+class BMD;
 
-#ifndef MAIN_UPDATE
-#define MAIN_UPDATE 603
-#endif //_USE_32BIT_TIME_T
-// patch
-// winmain
-#include "Defined_Global.h"
-#include "Winmain.h"
+// ============================================================
+// FIX: Ordem correta de includes do projeto.
+// Cada header depende dos anteriores. Não altere a ordem.
+// ============================================================
 
-// client
-#include "_define.h"
+// 1. Defines primeiro — nenhuma dependência (MAX_CLASS, ITEM_AXE, etc.)
+#include "_define.h"        // FIX: deve vir ANTES de _enum.h
+
+// 2. Enums — depende de _define.h (MAX_CLASS, ITEM_AXE, MODEL_MONSTER_END)
 #include "_enum.h"
+
+// 3. Types — depende de _enum.h (eBuffState para BuffStateMap)
 #include "_types.h"
+
+// 4. Structs — depende de _types.h (vec3_t)
 #include "_struct.h"
-#include "_TextureIndex.h"
 
-#include "_GlobalFunctions.h"
-#include "w_WindowMessageHandler.h"
+// 5. Object — depende de _struct.h (OBJECT, PART_t)
+//    BMD já foi forward-declarado acima, então ZzzObject.h pode usá-lo
+#include "ZzzObject.h"
 
-#include "WINHANDLE.h"
-#include "imgui.h"
+// 6. BMD — depende de ZzzObject.h (OBJECT)
+#include "ZzzBMD.h"
 
-#include "./Math/ZzzMathLib.h"
-#include "CBInterface.h"
-#include "CGMCharacter.h"
-#include "CGMProtect.h"
-#include "InfoHelperFunctions.h"
-#include "NewUICommon.h"
-#include "UIDefaultBase.h"
-#include "Util.h"
-#include "ZzzOpenglUtil.h"
+// 7. Character — depende de _struct.h (Script_Skill) e ZzzObject.h (OBJECT)
+#include "ZzzCharacter.h"
+
+// Mantenha seus includes adicionais do projeto abaixo:
+// #include "BaseCls.h"
+// #include "muConsoleDebug.h"
