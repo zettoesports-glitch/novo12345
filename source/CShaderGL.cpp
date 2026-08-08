@@ -28,13 +28,45 @@ CShaderGL* CShaderGL::Instance()
     return &sInstance;
 }
 
+// =============================================================================
+// FIX PASSO 3: Setar defaults dos novos uniforms (alpha test e fog)
+// Chamado automaticamente apos carregar cada shader no Init()
+// =============================================================================
+void CShaderGL::SetDefaultUniforms(GLuint program)
+{
+    if (program == 0) return;
+
+    glUseProgram(program);
+
+    // Alpha Test (substitui glAlphaFunc(GL_GREATER, 0.25f))
+    GLint locAlphaThresh = glGetUniformLocation(program, "uAlphaThreshold");
+    if (locAlphaThresh >= 0) glUniform1f(locAlphaThresh, 0.25f);
+
+    GLint locAlphaTest = glGetUniformLocation(program, "uAlphaTest");
+    if (locAlphaTest >= 0) glUniform1i(locAlphaTest, 1);  // true por padrao
+
+    // Fog (substitui glEnable(GL_FOG) + glFogf + glFogfv)
+    GLint locFogEnable = glGetUniformLocation(program, "uFogEnable");
+    if (locFogEnable >= 0) glUniform1i(locFogEnable, 0);  // false por padrao
+
+    GLint locFogColor = glGetUniformLocation(program, "uFogColor");
+    if (locFogColor >= 0) glUniform3f(locFogColor, 20.0f/256.0f, 20.0f/256.0f, 20.0f/256.0f);
+
+    GLint locFogStart = glGetUniformLocation(program, "uFogStart");
+    if (locFogStart >= 0) glUniform1f(locFogStart, 2000.0f);
+
+    GLint locFogEnd = glGetUniformLocation(program, "uFogEnd");
+    if (locFogEnd >= 0) glUniform1f(locFogEnd, 2700.0f);
+
+    GLint locFogDensity = glGetUniformLocation(program, "uFogDensity");
+    if (locFogDensity >= 0) glUniform1f(locFogDensity, 0.0004f);
+}
+
 void CShaderGL::Init()
 {
     if (m_bInitialized)
         return;
 
-    // FIX: eliminado #ifdef SHADER_VERSION_TEST. Agora SEMPRE carrega shaders.
-    // O caminho legado foi removido do ZzzBMD.cpp.
     this->shader_id =
         this->LoadShaderProgram("Shaders/shader.vs", "Shaders/shader.fs");
     this->shader_terrain_id =
@@ -47,6 +79,14 @@ void CShaderGL::Init()
         this->LoadShaderProgram("Shaders/colorize.vs", "Shaders/colorize.fs");
     this->shader_forward_transparent_id =
         this->LoadShaderProgram("Shaders/shader.vs", "Shaders/forward_transparent.fs");
+
+    // FIX PASSO 3: setar defaults em todos os shaders
+    SetDefaultUniforms(shader_id);
+    SetDefaultUniforms(shader_terrain_id);
+    SetDefaultUniforms(shader_glow_id);
+    SetDefaultUniforms(shader_character_id);
+    SetDefaultUniforms(shader_colorized_id);
+    SetDefaultUniforms(shader_forward_transparent_id);
 
     m_bInitialized = (shader_id != 0);
 
@@ -150,9 +190,9 @@ GLuint CShaderGL::run_shader(const char* shader_text, GLenum type)
 }
 
 // =============================================================================
-// FIX CRÍTICO: LoadShaderProgram agora injeta common_lighting.glsl
-// automaticamente no fragment shader, logo após a linha #version.
-// Isso elimina duplicação de código de iluminação entre shaders.
+// FIX CRITICO: LoadShaderProgram agora injeta common_lighting.glsl
+// automaticamente no fragment shader, logo apos a linha #version.
+// Isso elimina duplicacao de codigo de iluminacao entre shaders.
 // =============================================================================
 GLuint CShaderGL::LoadShaderProgram(const char* vertexShaderFile, const char* fragmentShaderFile)
 {
@@ -244,7 +284,7 @@ void CShaderGL::setVec4(const char* name, float x, float y, float z, float w) co
     GLint loc = glGetUniformLocation(shader_id, name);
     if (loc >= 0) glUniform4f(loc, x, y, z, w);
 }
-void CShaderGL::setMat4(const char* name, const glm::mat4& matrix) const  // FIX: const&
+void CShaderGL::setMat4(const char* name, const glm::mat4& matrix) const
 {
     GLint loc = glGetUniformLocation(shader_id, name);
     if (loc >= 0) glUniformMatrix4fv(loc, 1, GL_FALSE, glm::value_ptr(matrix));

@@ -1,10 +1,7 @@
 #version 330 core
 // =============================================================================
 // forward_transparent.fs
-// -----------------------------------------------------------------------------
-// Forward shading para transparência real (alpha blend).
-// Roda em pass separado DEPOIS do deferred lighting.
-// Usa a mesma interface VS_OUT do shader.vs (gbuffer.vs).
+// FIX PASSO 3: adicionado alpha test
 // =============================================================================
 
 in VS_OUT {
@@ -22,22 +19,20 @@ uniform float ambientStrength;
 uniform float specularStrength;
 uniform float shininess;
 
-// Parâmetros de glow (antes hardcoded em glow.fs)
-uniform bool  enableGlow;
-uniform float glowIntensity;
-uniform vec3  glowColor;
-uniform float glowPulseSpeed;
-uniform float time;
+uniform float uAlphaThreshold;
+uniform bool  uAlphaTest;
+uniform bool  uFogEnable;
+uniform vec3  uFogColor;
+uniform float uFogStart;
+uniform float uFogEnd;
 
 layout (location = 0) out vec4 FragColor;
 
 void main()
 {
     vec4 texColor = texture(texture1, fs_in.TexCoord);
-    float alpha = texColor.a * fs_in.BakedLight.a;
 
-    // Transparência real — alpha blend, NÃO discard (exceto totalmente invisível)
-    if (alpha < 0.01)
+    if (uAlphaTest && texColor.a * fs_in.BakedLight.a < uAlphaThreshold)
         discard;
 
     Material mat;
@@ -50,12 +45,12 @@ void main()
         fs_in.WorldPos, fs_in.WorldNormal, viewPos,
         lightPos, lightColor, mat);
 
-    // Glow opcional (wings, partículas, efeitos)
-    if (enableGlow)
+    if (uFogEnable)
     {
-        float pulse = sin(time * glowPulseSpeed) * 0.5 + 0.5;
-        result += glowColor * glowIntensity * pulse;
+        float dist = length(viewPos - fs_in.WorldPos);
+        float fogFactor = clamp((uFogEnd - dist) / (uFogEnd - uFogStart), 0.0, 1.0);
+        result = mix(uFogColor, result, fogFactor);
     }
 
-    FragColor = vec4(result, alpha);
+    FragColor = vec4(result, texColor.a * fs_in.BakedLight.a);
 }

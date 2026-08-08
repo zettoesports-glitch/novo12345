@@ -812,6 +812,9 @@ void BeginOpengl(int x, int y, int Width, int Height, bool Screen)
 	glDepthFunc(GL_LEQUAL);
 
 	GetOpenGLMatrix(CameraMatrix);
+
+	// FIX PASSO 3: enviar matrizes atuais para o shader ativo
+	GL_UpdateShaderMatrices();
 }
 
 void EndOpengl()
@@ -1117,6 +1120,9 @@ void BeginSprite()
 {
 	GL_PushMatrix();
 	GL_LoadIdentity();
+
+	// FIX PASSO 3: enviar matrizes para o shader (usa projecao + modelview atuais)
+	GL_UpdateShaderMatrices();
 }
 
 void EndSprite()
@@ -1323,31 +1329,33 @@ float RenderNumberHQ(float x, float y, int Num, float Width, float Height)
 
 void BeginBitmap()
 {
-	// UI (potion number, fonte, HP): precisa de fixed-function limpo apos 3D
+	// FIX PASSO 3: nao desligar o shader no Core Profile!
+	// glUseProgram(0) quebra o pipeline. Em vez disso, configurar
+	// uma projecao ortografica 2D e enviar para o shader.
+
+	// Limpar estado de VAO/VBO anterior (seguro fazer)
 	glBindVertexArray(0);
-	glUseProgram(0);
 	for (int ai = 0; ai < 4; ++ai)
 		glDisableVertexAttribArray(ai);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
-	glMatrixMode(GL_PROJECTION);
-	glPushMatrix();
-	glLoadIdentity();
-
-	float aspectRatio = static_cast<float>(WindowWidth) / WindowHeight;
+	// FIX PASSO 3: configurar matrizes para UI 2D ortografica
+	GL_MatrixMode(GL_PROJECTION);
+	GL_PushMatrix();
+	GL_LoadIdentity();
 
 	glViewport(0, 0, WindowWidth, WindowHeight);
-	gluPerspective(CameraFOV, aspectRatio, CameraViewNear, CameraViewFar);
+	GL_Ortho(0.0f, (float)WindowWidth, 0.0f, (float)WindowHeight, -1.0f, 1.0f);
 
-	glLoadIdentity();
-	gluOrtho2D(0, WindowWidth, 0, WindowHeight);
+	GL_MatrixMode(GL_MODELVIEW);
+	GL_PushMatrix();
+	GL_LoadIdentity();
 
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
-
-	glLoadIdentity();
 	DisableDepthTest();
+
+	// FIX PASSO 3: enviar matrizes ortograficas para o shader
+	GL_UpdateShaderMatrices();
 }
 
 void EndBitmap()

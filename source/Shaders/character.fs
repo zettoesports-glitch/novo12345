@@ -1,11 +1,7 @@
 #version 330 core
 // =============================================================================
 // character.fs
-// -----------------------------------------------------------------------------
-// Fragment shader para personagens.
-// FIX: convertido de compatibility para core profile.
-// FIX: removidos inicializadores de uniform (ilegais em GLSL 330 puro).
-// Usa common_lighting.glsl para iluminação Blinn-Phong.
+// FIX PASSO 3: adicionado alpha test e fog (mesmo codigo de shader.fs)
 // =============================================================================
 
 in VS_OUT {
@@ -23,11 +19,21 @@ uniform float ambientStrength;
 uniform float specularStrength;
 uniform float shininess;
 
+uniform float uAlphaThreshold;
+uniform bool  uAlphaTest;
+uniform bool  uFogEnable;
+uniform vec3  uFogColor;
+uniform float uFogStart;
+uniform float uFogEnd;
+
 layout (location = 0) out vec4 FragColor;
 
 void main()
 {
     vec4 texColor = texture(texture1, fs_in.TexCoord);
+
+    if (uAlphaTest && texColor.a * fs_in.BakedLight.a < uAlphaThreshold)
+        discard;
 
     Material mat;
     mat.albedo           = texColor.rgb * fs_in.BakedLight.rgb;
@@ -38,6 +44,13 @@ void main()
     vec3 result = ComputeBlinnPhong(
         fs_in.WorldPos, fs_in.WorldNormal, viewPos,
         lightPos, lightColor, mat);
+
+    if (uFogEnable)
+    {
+        float dist = length(viewPos - fs_in.WorldPos);
+        float fogFactor = clamp((uFogEnd - dist) / (uFogEnd - uFogStart), 0.0, 1.0);
+        result = mix(uFogColor, result, fogFactor);
+    }
 
     FragColor = vec4(result, texColor.a * fs_in.BakedLight.a);
 }

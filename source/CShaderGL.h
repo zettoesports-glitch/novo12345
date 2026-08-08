@@ -8,7 +8,7 @@
 
 /**
  * @file CShaderGL.h
- * @brief Gerenciador de shaders com suporte a colorização dinâmica
+ * @brief Gerenciador de shaders com suporte a colorizacao dinamica
  */
 
 class CShaderGL
@@ -21,7 +21,7 @@ public:
         SHADER_GLOW = 2,
         SHADER_CHARACTER = 3,
         SHADER_COLORIZED = 4,
-        SHADER_FORWARD_TRANSPARENT = 5  // FIX: novo — transparência real
+        SHADER_FORWARD_TRANSPARENT = 5
     };
 
     CShaderGL();
@@ -38,11 +38,14 @@ public:
     GLuint GetShaderGlowId() const;
     GLuint GetShaderCharacterId() const;
     GLuint GetShaderColorizedId() const;
-    GLuint GetShaderForwardTransparentId() const;  // FIX: novo
+    GLuint GetShaderForwardTransparentId() const;
 
     GLuint LoadShaderProgram(const char* vertexShaderFile, const char* fragmentShaderFile);
     bool readshader(const char* filename, std::string& shader_text);
     GLuint run_shader(const char* shader_text, GLenum type);
+
+    // FIX PASSO 3: setar defaults dos novos uniforms (alpha test + fog)
+    void SetDefaultUniforms(GLuint program);
 
     void setBool(const char* name, bool value) const;
     void setInt(const char* name, int value) const;
@@ -50,7 +53,7 @@ public:
     void setVec2(const char* name, float x, float y) const;
     void setVec3(const char* name, float x, float y, float z) const;
     void setVec4(const char* name, float x, float y, float z, float w) const;
-    void setMat4(const char* name, const glm::mat4& matrix) const;  // FIX: const&
+    void setMat4(const char* name, const glm::mat4& matrix) const;
 
     void SetPerspective(float fov, float aspect, float nearPlane, float farPlane);
     void run_projection();
@@ -63,7 +66,7 @@ private:
     GLuint shader_glow_id;
     GLuint shader_character_id;
     GLuint shader_colorized_id;
-    GLuint shader_forward_transparent_id;  // FIX: novo
+    GLuint shader_forward_transparent_id;
 
     glm::mat4 m_ProjectionMatrix;
     bool m_bInitialized;
