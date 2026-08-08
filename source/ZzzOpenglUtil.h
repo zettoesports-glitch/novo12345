@@ -1,4 +1,10 @@
 #pragma once
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <stack>
+
 typedef float vec_t;
 typedef vec_t vec2_t[2];
 typedef vec_t vec3_t[3];
@@ -12,9 +18,9 @@ extern unsigned int WindowWidth;
 extern unsigned int WindowHeight;
 extern vec3_t CollisionPosition;
 extern float  FPS;
-#if defined(LDS_FOR_DEVELOPMENT_TESTMODE) || defined(LDS_UNFIXED_FIXEDFRAME_FORDEBUG)		// 실FPS.(고정 20FPS 상황에서 추정용.)
+#if defined(LDS_FOR_DEVELOPMENT_TESTMODE) || defined(LDS_UNFIXED_FIXEDFRAME_FORDEBUG)
 extern float g_fFrameEstimate;
-#endif // defined(LDS_FOR_DEVELOPMENT_TESTMODE) || defined(LDS_UNFIXED_FIXEDFRAME_FORDEBUG)
+#endif
 extern float  WorldTime;
 extern bool   CameraTopViewEnable;
 extern float  CameraViewNear;
@@ -52,8 +58,41 @@ extern DWORD		MouseRButtonPress;
 extern char         GrabFileName[];
 extern bool         GrabEnable;
 
-//  etc
-//void OpenExploper(char *Name,char *para=NULL);
+// =============================================================================
+// FIX PASSO 2: Sistema de Matrizes CPU (OpenGL 3.3 Core Profile)
+// =============================================================================
+extern glm::mat4 g_ProjectionMatrix;
+extern glm::mat4 g_ViewMatrix;
+extern glm::mat4 g_ModelViewMatrix;
+extern std::stack<glm::mat4> g_ProjectionStack;
+extern std::stack<glm::mat4> g_ModelViewStack;
+extern GLenum    g_CurrentMatrixMode;
+
+void GL_PushMatrix();
+void GL_PopMatrix();
+void GL_LoadIdentity();
+void GL_Translatef(float x, float y, float z);
+void GL_Rotatef(float angle, float x, float y, float z);
+void GL_Scalef(float x, float y, float z);
+void GL_MatrixMode(GLenum mode);
+void GL_GetFloatv(GLenum pname, float* params);
+void GL_Perspective(float fov, float aspect, float nearPlane, float farPlane);
+void GL_Ortho(float left, float right, float bottom, float top, float nearPlane, float farPlane);
+void GL_UpdateShaderMatrices(GLuint shaderProgram = 0);
+
+// Macros que redirecionam chamadas legadas para o sistema CPU
+#define glPushMatrix()      GL_PushMatrix()
+#define glPopMatrix()       GL_PopMatrix()
+#define glLoadIdentity()    GL_LoadIdentity()
+#define glTranslatef(x,y,z) GL_Translatef(x,y,z)
+#define glRotatef(a,x,y,z)  GL_Rotatef(a,x,y,z)
+#define glScalef(x,y,z)     GL_Scalef(x,y,z)
+#define glMatrixMode(m)     GL_MatrixMode(m)
+#define glGetFloatv(p,params) GL_GetFloatv(p,params)
+#define gluPerspective(f,a,n,z) GL_Perspective(f,a,n,z)
+#define gluOrtho2D(l,r,b,t) GL_Ortho(l,r,b,t,-1.0f,1.0f)
+// =============================================================================
+
 extern bool CheckID_HistoryDay(char* Name, WORD day);
 extern void SaveScreen();
 extern void gluPerspective2(float Fov, float Aspect, float ZNear, float ZFar);
@@ -130,11 +169,10 @@ extern bool IsVSyncEnabled();
 extern void EnableVSync();
 extern void DisableVSync();
 extern int GetFPSLimit();
-#endif // V_SYNCRONIZE
+#endif
 
 void CalcFPS();
 
 extern double  DeltaT;
 extern float   FPS;
 extern float   WorldTime;
-

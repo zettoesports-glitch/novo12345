@@ -127,8 +127,13 @@ bool CGPUSkinning::BeginRender(int uMode, float alpha, bool translate, float sca
 	extern int g_GpuMatrixEpoch;
 	if (m_matrixEpoch != g_GpuMatrixEpoch)
 	{
-		glGetFloatv(GL_MODELVIEW_MATRIX,  m_cachedModelView);
-		glGetFloatv(GL_PROJECTION_MATRIX, m_cachedProjection);
+const float* mv = glm::value_ptr(g_ModelViewMatrix);
+const float* proj = glm::value_ptr(g_ProjectionMatrix);
+for (int i = 0; i < 16; i++)
+{
+	m_cachedModelView[i] = mv[i];
+	m_cachedProjection[i] = proj[i];
+}
 		m_matrixEpoch = g_GpuMatrixEpoch;
 	}
 

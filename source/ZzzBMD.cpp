@@ -1040,10 +1040,7 @@ void BMD::ReleaseLightMaps()
 
 void BMD::BeginRender(float Alpha)
 {
-	// FIX: glPushMatrix ainda necessario porque o resto do codigo legado
-	// (RenderMeshTranslate, etc.) usa glTranslatef/glRotatef/glScalef.
-	// O shader moderno le de volta via glGetFloatv(GL_MODELVIEW_MATRIX).
-	glPushMatrix();
+	glPushMatrix();  // macro redireciona para GL_PushMatrix()
 	++g_GpuMatrixEpoch;
 #ifdef GPU_SKINNING
 	CGPUSkinning::Get().InvalidateMatrices();
@@ -1052,8 +1049,7 @@ void BMD::BeginRender(float Alpha)
 
 void BMD::EndRender()
 {
-	glPopMatrix();
-	// NAO limpar g_pCurrentBoneTransform: chrome/bright do set rodam apos EndRender
+	glPopMatrix();  // macro redireciona para GL_PopMatrix()
 }
 
 bool BMD::runtime_linkaction(PART_t* f, OBJECT* pObject)

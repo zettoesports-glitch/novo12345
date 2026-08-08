@@ -54,6 +54,136 @@ float BackMouseY = MouseY;
 float MouseRenderX = WindowWidth / 2;
 float MouseRenderY = WindowHeight / 2;
 
+// =============================================================================
+// FIX PASSO 2: Variaveis globais de matrizes CPU (OpenGL 3.3 Core Profile)
+// =============================================================================
+glm::mat4 g_ProjectionMatrix = glm::mat4(1.0f);
+glm::mat4 g_ViewMatrix       = glm::mat4(1.0f);
+glm::mat4 g_ModelViewMatrix  = glm::mat4(1.0f);
+std::stack<glm::mat4> g_ProjectionStack;
+std::stack<glm::mat4> g_ModelViewStack;
+GLenum g_CurrentMatrixMode = GL_MODELVIEW;
+
+// =============================================================================
+// FIX PASSO 2: Wrappers de matrizes (substituem funcoes removidas do Core)
+// =============================================================================
+
+void GL_PushMatrix()
+{
+	if (g_CurrentMatrixMode == GL_PROJECTION)
+		g_ProjectionStack.push(g_ProjectionMatrix);
+	else
+		g_ModelViewStack.push(g_ModelViewMatrix);
+}
+
+void GL_PopMatrix()
+{
+	if (g_CurrentMatrixMode == GL_PROJECTION)
+	{
+		if (!g_ProjectionStack.empty())
+		{
+			g_ProjectionMatrix = g_ProjectionStack.top();
+			g_ProjectionStack.pop();
+		}
+	}
+	else
+	{
+		if (!g_ModelViewStack.empty())
+		{
+			g_ModelViewMatrix = g_ModelViewStack.top();
+			g_ModelViewStack.pop();
+		}
+	}
+}
+
+void GL_LoadIdentity()
+{
+	if (g_CurrentMatrixMode == GL_PROJECTION)
+		g_ProjectionMatrix = glm::mat4(1.0f);
+	else
+		g_ModelViewMatrix = glm::mat4(1.0f);
+}
+
+void GL_Translatef(float x, float y, float z)
+{
+	if (g_CurrentMatrixMode == GL_PROJECTION)
+		g_ProjectionMatrix = glm::translate(g_ProjectionMatrix, glm::vec3(x, y, z));
+	else
+		g_ModelViewMatrix = glm::translate(g_ModelViewMatrix, glm::vec3(x, y, z));
+}
+
+void GL_Rotatef(float angle, float x, float y, float z)
+{
+	if (g_CurrentMatrixMode == GL_PROJECTION)
+		g_ProjectionMatrix = glm::rotate(g_ProjectionMatrix, glm::radians(angle), glm::vec3(x, y, z));
+	else
+		g_ModelViewMatrix = glm::rotate(g_ModelViewMatrix, glm::radians(angle), glm::vec3(x, y, z));
+}
+
+void GL_Scalef(float x, float y, float z)
+{
+	if (g_CurrentMatrixMode == GL_PROJECTION)
+		g_ProjectionMatrix = glm::scale(g_ProjectionMatrix, glm::vec3(x, y, z));
+	else
+		g_ModelViewMatrix = glm::scale(g_ModelViewMatrix, glm::vec3(x, y, z));
+}
+
+void GL_MatrixMode(GLenum mode)
+{
+	g_CurrentMatrixMode = mode;
+}
+
+void GL_GetFloatv(GLenum pname, float* params)
+{
+	if (pname == GL_MODELVIEW_MATRIX)
+	{
+		const float* m = glm::value_ptr(g_ModelViewMatrix);
+		for (int i = 0; i < 16; i++) params[i] = m[i];
+	}
+	else if (pname == GL_PROJECTION_MATRIX)
+	{
+		const float* m = glm::value_ptr(g_ProjectionMatrix);
+		for (int i = 0; i < 16; i++) params[i] = m[i];
+	}
+	else
+	{
+		// Fallback para funcoes que ainda existem no Core (GL_VIEWPORT, etc.)
+		glGetFloatv(pname, params);
+	}
+}
+
+void GL_Perspective(float fov, float aspect, float nearPlane, float farPlane)
+{
+	g_ProjectionMatrix = glm::perspective(glm::radians(fov), aspect, nearPlane, farPlane);
+}
+
+void GL_Ortho(float left, float right, float bottom, float top, float nearPlane, float farPlane)
+{
+	g_ProjectionMatrix = glm::ortho(left, right, bottom, top, nearPlane, farPlane);
+}
+
+void GL_UpdateShaderMatrices(GLuint shaderProgram)
+{
+	if (shaderProgram == 0)
+		shaderProgram = gShaderGL->GetShaderId();
+	if (shaderProgram == 0) return;
+
+	GLint locProj = glGetUniformLocation(shaderProgram, "projection");
+	GLint locView = glGetUniformLocation(shaderProgram, "view");
+	GLint locModel = glGetUniformLocation(shaderProgram, "model");
+
+	if (locProj >= 0) glUniformMatrix4fv(locProj, 1, GL_FALSE, glm::value_ptr(g_ProjectionMatrix));
+	if (locView >= 0) glUniformMatrix4fv(locView, 1, GL_FALSE, glm::value_ptr(g_ViewMatrix));
+	if (locModel >= 0) glUniformMatrix4fv(locModel, 1, GL_FALSE, glm::value_ptr(g_ModelViewMatrix));
+
+	GLint locNormal = glGetUniformLocation(shaderProgram, "normalMatrix");
+	if (locNormal >= 0)
+	{
+		glm::mat3 normalMat = glm::transpose(glm::inverse(glm::mat3(g_ModelViewMatrix)));
+		glUniformMatrix3fv(locNormal, 1, GL_FALSE, glm::value_ptr(normalMat));
+	}
+}
+
 bool  MouseLButton;
 bool  MouseLButtonPop;
 bool  MouseLButtonPush;
@@ -174,25 +304,23 @@ int   ScreenCenterYFlip;
 
 void GetOpenGLMatrix(float Matrix[3][4])
 {
-	float OpenGLMatrix[16];
-	glGetFloatv(GL_MODELVIEW_MATRIX, OpenGLMatrix);
+	const float* m = glm::value_ptr(g_ModelViewMatrix);
 	for (int i = 0; i < 3; i++)
 	{
 		for (int j = 0; j < 4; j++)
 		{
-			Matrix[i][j] = OpenGLMatrix[j * 4 + i];
+			Matrix[i][j] = m[j * 4 + i];
 		}
 	}
 }
 
 void gluPerspective2(float Fov, float Aspect, float ZNear, float ZFar)
 {
-	gluPerspective(Fov, Aspect, ZNear, ZFar);
+	GL_Perspective(Fov, Aspect, ZNear, ZFar);  // FIX PASSO 2
 
 #ifdef SHADER_VERSION_TEST
 	gShaderGL->SetPerspective(Fov, Aspect, ZNear, ZFar);
-#endif // SHADER_VERSION_TEST
-
+#endif
 
 	ScreenCenterX = OpenglWindowX + OpenglWindowWidth / 2;
 	ScreenCenterY = OpenglWindowY + OpenglWindowHeight / 2;
@@ -657,24 +785,22 @@ void BeginOpengl(int x, int y, int Width, int Height, bool Screen)
 		Height = ConvertNoY(Height);
 	}
 
-	glMatrixMode(GL_PROJECTION);
-	glPushMatrix();
-	glLoadIdentity();
+	GL_MatrixMode(GL_PROJECTION);
+	GL_PushMatrix();
+	GL_LoadIdentity();
 	glViewport2(x, y, Width, Height);
 
 	gluPerspective2(CameraFOV, (float)Width / (float)Height, CameraViewNear, CameraViewFar * 1.4f);
 
-	glMatrixMode(GL_MODELVIEW);
-	glPushMatrix();
-	glLoadIdentity();
-	glRotatef(CameraAngle[1], 0.f, 1.f, 0.f);
+	GL_MatrixMode(GL_MODELVIEW);
+	GL_PushMatrix();
+	GL_LoadIdentity();
+	GL_Rotatef(CameraAngle[1], 0.f, 1.f, 0.f);
 	if (CameraTopViewEnable == false)
-		glRotatef(CameraAngle[0], 1.f, 0.f, 0.f);
-	glRotatef(CameraAngle[2], 0.f, 0.f, 1.f);
-	glTranslatef(-CameraPosition[0], -CameraPosition[1], -CameraPosition[2]);
+		GL_Rotatef(CameraAngle[0], 1.f, 0.f, 0.f);
+	GL_Rotatef(CameraAngle[2], 0.f, 0.f, 1.f);
+	GL_Translatef(-CameraPosition[0], -CameraPosition[1], -CameraPosition[2]);
 
-	glDisable(GL_ALPHA_TEST);
-	glEnable(GL_TEXTURE_2D);
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
 	glDepthMask(true);
@@ -684,34 +810,16 @@ void BeginOpengl(int x, int y, int Width, int Height, bool Screen)
 	CullFaceEnable = true;
 	DepthMaskEnable = true;
 	glDepthFunc(GL_LEQUAL);
-	glAlphaFunc(GL_GREATER, 0.25f);
-
-	if (FogEnable)
-	{
-		float color[] = { 20 / 256.f, 20 / 256.f, 20 / 256.f, 256.f / 256.f };
-
-		glEnable(GL_FOG);
-		glFogfv(GL_FOG_COLOR, color);
-		glFogf(GL_FOG_DENSITY, FogDensity);
-
-		glFogf(GL_FOG_MODE, GL_LINEAR);
-		glFogf(GL_FOG_START, 2000.f);
-		glFogf(GL_FOG_END, 2700.f);
-	}
-	else
-	{
-		glDisable(GL_FOG);
-	}
 
 	GetOpenGLMatrix(CameraMatrix);
 }
 
 void EndOpengl()
 {
-	glMatrixMode(GL_MODELVIEW);
-	glPopMatrix();
-	glMatrixMode(GL_PROJECTION);
-	glPopMatrix();
+	GL_MatrixMode(GL_MODELVIEW);
+	GL_PopMatrix();
+	GL_MatrixMode(GL_PROJECTION);
+	GL_PopMatrix();
 }
 
 void UpdateMousePositionn()
@@ -1007,13 +1115,13 @@ void RenderPlane3D(float Width, float Height, float Matrix[3][4])
 
 void BeginSprite()
 {
-	glPushMatrix();
-	glLoadIdentity();
+	GL_PushMatrix();
+	GL_LoadIdentity();
 }
 
 void EndSprite()
 {
-	glPopMatrix();
+	GL_PopMatrix();
 }
 
 void RenderSprite(int Texture, vec3_t Position, float Width, float Height, vec3_t Light, float Rotation, float u, float v, float uWidth, float vHeight)
@@ -1082,40 +1190,20 @@ void RenderSprite(int Texture, vec3_t Position, float Width, float Height, vec3_
 		}
 	}
 
-	glEnableClientState(GL_VERTEX_ARRAY);
-	glEnableClientState(GL_COLOR_ARRAY);
-	glEnableClientState(GL_TEXTURE_COORD_ARRAY);
+	// FIX PASSO 2: glEnableClientState/glVertexPointer/glTexCoordPointer/glColorPointer
+	// removidos no OpenGL 3.3 Core Profile. Substituidos por glVertexAttribPointer.
+	glEnableVertexAttribArray(0);  // position  -> layout(location = 0)
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, p);
+	glEnableVertexAttribArray(1);  // texCoord  -> layout(location = 1)
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, c);
+	glEnableVertexAttribArray(2);  // color     -> layout(location = 2)
+	glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 0, colors);
 
-	glVertexPointer(3, GL_FLOAT, 0, p);
-	glTexCoordPointer(2, GL_FLOAT, 0, c);
-	glColorPointer(4, GL_FLOAT, 0, colors);
+	glDrawArrays(GL_QUADS, 0, 4);  // 4 vertices
 
-	glDrawArrays(GL_QUADS, 0, 4);  // 4 vertices en total
-
-	glDisableClientState(GL_VERTEX_ARRAY);
-	glDisableClientState(GL_COLOR_ARRAY);
-	glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-
-
-
-	//glBegin(GL_QUADS);
-	//if (Bitmaps[Texture].Components == 3)
-	//{
-	//	glColor3fv(Light);
-	//}
-	//else
-	//{
-	//	if (Texture == BITMAP_BLOOD + 1 || Texture == BITMAP_FONT_HIT)
-	//		glColor4f(Light[0], Light[1], Light[2], 1.f);
-	//	else
-	//		glColor4f(Light[0], Light[1], Light[2], Light[0]);
-	//}
-	//for (int i = 0; i < 4; i++)
-	//{
-	//	glTexCoord2f(c[i][0], c[i][1]);
-	//	glVertex3fv(p[i]);
-	//}
-	//glEnd();
+	glDisableVertexAttribArray(0);
+	glDisableVertexAttribArray(1);
+	glDisableVertexAttribArray(2);
 }
 
 void RenderSpriteUV(int Texture, vec3_t Position, float Width, float Height, float(*UV)[2], vec3_t Light[4], float Alpha)
